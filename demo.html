@@ -196,42 +196,6 @@
         <div id="status-textarea" class="status"></div>
     </div>
 
-    <!-- API reference -->
-    <div class="card">
-        <h2>Quick start</h2>
-        <div class="api-grid">
-            <div class="api-block">
-                <h3>Initialise</h3>
-                <code>const m = new MentionJS(el, {
-  trigger: '@',
-  debounceDelay: 300,
-  noResultsText: 'Not found',
-  searchFunction: async (q) => ({
-    items: [...],
-    nextPageUrl: null,
-  }),
-  onMentionSelect(data) { ... },
-});</code>
-            </div>
-            <div class="api-block">
-                <h3>Methods</h3>
-                <code>// Read committed mentions
-m.getMentions();
-// → [{id, name}] / [{id,name,start,end}]
-
-// Insert programmatically
-m.push({ id: 1, name: 'Alice' });
-
-// Clear content
-m.clear();
-
-// Tear down
-m.destroy();</code>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Library -->
 <script src="mention.js"></script>
 <script>
