@@ -2,13 +2,17 @@
   "name": "@shelamkoff/mentionjs",
   "version": "1.0.0",
   "description": "Lightweight @-mention autocomplete for textarea and contenteditable. No dependencies.",
-  "main": "mention.js",
-  "types": "mention.d.ts",
+  "main": "dist/mention.min.js",
+  "types": "dist/mention.d.ts",
   "files": [
     "mention.js",
     "mention.css",
-    "mention.d.ts"
+    "mention.d.ts",
+    "dist/"
   ],
+  "scripts": {
+    "build": "terser mention.js --compress --mangle --output dist/mention.min.js --comments \"/^!/\" && cleancss -o dist/mention.min.css mention.css && cp mention.d.ts dist/mention.d.ts"
+  },
   "keywords": [
     "mention",
     "autocomplete",
@@ -27,5 +31,9 @@
   "homepage": "https://github.com/shelamkoff/mentionjs#readme",
   "bugs": {
     "url": "https://github.com/shelamkoff/mentionjs/issues"
+  },
+  "devDependencies": {
+    "clean-css-cli": "^5.6.3",
+    "terser": "^5.46.0"
   }
 }
