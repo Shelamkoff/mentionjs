@@ -239,7 +239,7 @@ m.push({ id: 1, name: 'Анна Иванова' });
 | `mention.js` | Исходный код (~1220 строк) |
 | `mention.css` | Стили по умолчанию |
 | `mention.d.ts` | TypeScript типы |
-| `dist/mention.min.js` | Минифицированный JS (~23 КБ) |
+| `dist/mention.min.js` | Минифицированный JS (~22 КБ) |
 | `dist/mention.min.css` | Минифицированный CSS (~2 КБ) |
 | `demo.html` | Интерактивная демо-страница |
 

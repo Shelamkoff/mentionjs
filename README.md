@@ -239,7 +239,7 @@ Import `mention.css` for default styles. All classes are customizable:
 | `mention.js` | Library source (~1220 lines) |
 | `mention.css` | Default stylesheet |
 | `mention.d.ts` | TypeScript type definitions |
-| `dist/mention.min.js` | Minified JS (~23 KB) |
+| `dist/mention.min.js` | Minified JS (~22 KB) |
 | `dist/mention.min.css` | Minified CSS (~2 KB) |
 | `demo.html` | Interactive demo page |
 
