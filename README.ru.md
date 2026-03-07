@@ -1,7 +1,9 @@
 # MentionJS
 
 @-mention автокомплит для `<textarea>` и `contenteditable`.
-Без зависимостей. < 4 КБ gzipped. TypeScript типы в комплекте.
+Без зависимостей. ~7 КБ gzipped. TypeScript типы в комплекте.
+
+**[Демо](https://shelamkoff.github.io/mentionjs/demo.html)**
 
 ## Возможности
 
@@ -234,9 +236,11 @@ m.push({ id: 1, name: 'Анна Иванова' });
 
 | Файл | Описание |
 |------|----------|
-| `mention.js` | Библиотека (~1220 строк) |
+| `mention.js` | Исходный код (~1220 строк) |
 | `mention.css` | Стили по умолчанию |
 | `mention.d.ts` | TypeScript типы |
+| `dist/mention.min.js` | Минифицированный JS (~23 КБ) |
+| `dist/mention.min.css` | Минифицированный CSS (~2 КБ) |
 | `demo.html` | Интерактивная демо-страница |
 
 ## Поддержка браузеров

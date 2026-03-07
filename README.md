@@ -1,7 +1,9 @@
 # MentionJS
 
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
-No dependencies. < 4 KB gzipped. TypeScript definitions included.
+No dependencies. ~7 KB gzipped. TypeScript definitions included.
+
+**[Live Demo](https://shelamkoff.github.io/mentionjs/demo.html)**
 
 ## Features
 
@@ -234,9 +236,11 @@ Import `mention.css` for default styles. All classes are customizable:
 
 | File | Description |
 |------|-------------|
-| `mention.js` | Library (~1220 lines) |
+| `mention.js` | Library source (~1220 lines) |
 | `mention.css` | Default stylesheet |
 | `mention.d.ts` | TypeScript type definitions |
+| `dist/mention.min.js` | Minified JS (~23 KB) |
+| `dist/mention.min.css` | Minified CSS (~2 KB) |
 | `demo.html` | Interactive demo page |
 
 ## Browser Support
