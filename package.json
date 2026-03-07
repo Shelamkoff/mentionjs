@@ -11,7 +11,7 @@
     "dist/"
   ],
   "scripts": {
-    "build": "terser mention.js --compress --mangle --output dist/mention.min.js --comments \"/^!/\" && cleancss -o dist/mention.min.css mention.css && cp mention.d.ts dist/mention.d.ts"
+    "build": "terser mention.js --compress --mangle --comments false --output dist/mention.min.js && cleancss -o dist/mention.min.css mention.css && cp mention.d.ts dist/mention.d.ts"
   },
   "keywords": [
     "mention",
