@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MentionJS — Demo</title>
+    <link rel="stylesheet" href="mention.css">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            padding: 32px 16px;
+        }
+
+        .page { max-width: 720px; margin: 0 auto; }
+
+        h1 {
+            text-align: center;
+            font-size: 28px;
+            font-weight: 700;
+            color: #1976d2;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 28px;
+            margin-bottom: 28px;
+        }
+
+        .card h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        /* ── Editable fields ── */
+        .editor,
+        .text-area {
+            width: 100%;
+            min-height: 90px;
+            padding: 12px 14px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            line-height: 1.5;
+            background: #fafafa;
+            transition: border-color 0.15s;
+            resize: vertical;
+        }
+
+        .editor { outline: none; }
+        .text-area { display: block; }
+
+        .editor:focus,
+        .text-area:focus {
+            border-color: #1976d2;
+            background: #fff;
+            outline: none;
+        }
+
+        .editor:empty::before {
+            content: attr(data-placeholder);
+            color: #9ca3af;
+            pointer-events: none;
+        }
+
+        /* ── Toolbar ── */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #1976d2; color: #fff; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-ghost { background: transparent; border: 1.5px solid #d1d5db; color: #374151; }
+
+        /* ── Status chip ── */
+        .status {
+            display: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #d1fae5;
+            color: #065f46;
+            margin-top: 8px;
+        }
+        .status.visible { display: block; }
+
+        /* ── API section ── */
+        .api-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 520px) { .api-grid { grid-template-columns: 1fr; } }
+
+        .api-block {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .api-block h3 { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+
+        code {
+            background: #1e293b;
+            color: #7dd3fc;
+            font-family: 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 12px;
+            border-radius: 5px;
+            padding: 6px 10px;
+            display: block;
+            line-height: 1.6;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <h1>MentionJS</h1>
+    <p class="subtitle">Lightweight @-mention autocomplete · &lt;4 KB gzipped · No dependencies</p>
+
+    <!-- ContentEditable demo -->
+    <div class="card">
+        <h2>ContentEditable <span class="badge">Rich text</span></h2>
+        <div
+            id="editor"
+            class="editor"
+            contenteditable="true"
+            data-placeholder="Type @ to mention someone…"
+        ></div>
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="readMentions('editor')">Get mentions</button>
+            <button class="btn btn-secondary" onclick="pushMention('editor')">Push @Анна</button>
+            <button class="btn btn-ghost" onclick="clearField('editor')">Clear</button>
+        </div>
+        <div id="status-editor" class="status"></div>
+    </div>
+
+    <!-- Textarea demo -->
+    <div class="card">
+        <h2>Textarea <span class="badge">Plain text</span></h2>
+        <textarea
+            id="textarea"
+            class="text-area"
+            placeholder="Type @ to mention someone…"
+            rows="4"
+        ></textarea>
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="readMentions('textarea')">Get mentions</button>
+            <button class="btn btn-secondary" onclick="pushMention('textarea')">Push @Мария</button>
+            <button class="btn btn-ghost" onclick="clearField('textarea')">Clear</button>
+        </div>
+        <div id="status-textarea" class="status"></div>
+    </div>
+
+    <!-- API reference -->
+    <div class="card">
+        <h2>Quick start</h2>
+        <div class="api-grid">
+            <div class="api-block">
+                <h3>Initialise</h3>
+                <code>const m = new MentionJS(el, {
+  trigger: '@',
+  debounceDelay: 300,
+  noResultsText: 'Not found',
+  searchFunction: async (q) => ({
+    items: [...],
+    nextPageUrl: null,
+  }),
+  onMentionSelect(data) { ... },
+});</code>
+            </div>
+            <div class="api-block">
+                <h3>Methods</h3>
+                <code>// Read committed mentions
+m.getMentions();
+// → [{id, name}] / [{id,name,start,end}]
+
+// Insert programmatically
+m.push({ id: 1, name: 'Alice' });
+
+// Clear content
+m.clear();
+
+// Tear down
+m.destroy();</code>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Library -->
+<script src="mention.js"></script>
+<script>
+    // ── Sample data ───────────────────────────────────────────────────────
+
+    const USERS = [
+        { id: 1,  name: 'Анна Иванова',      details: 'Frontend Developer'     },
+        { id: 2,  name: 'Алексей Петров',     details: 'Backend Developer'      },
+        { id: 3,  name: 'Антон Сидоров',      details: 'UI/UX Designer'         },
+        { id: 4,  name: 'Александр Козлов',   details: 'Project Manager'        },
+        { id: 5,  name: 'Андрей Смирнов',     details: 'DevOps Engineer'        },
+        { id: 6,  name: 'Мария Васильева',    details: 'QA Engineer'            },
+        { id: 7,  name: 'Дмитрий Кузнецов',  details: 'Full Stack Developer'   },
+        { id: 8,  name: 'Елена Морозова',     details: 'Product Owner'          },
+        { id: 9,  name: 'Сергей Попов',       details: 'Tech Lead'              },
+        { id: 10, name: 'Ольга Новикова',     details: 'Business Analyst'       },
+        { id: 11, name: 'Николай Романов',    details: 'System Administrator'   },
+        { id: 12, name: 'Татьяна Фёдорова',  details: 'HR Manager'             },
+        { id: 13, name: 'Михаил Орлов',       details: 'Security Engineer'      },
+        { id: 14, name: 'Екатерина Волкова',  details: 'Marketing Manager'      },
+        { id: 15, name: 'Павел Зайцев',       details: 'Sales Manager'          },
+    ];
+
+    const PAGE_SIZE = 5;
+
+    async function searchUsers(query, nextPageUrl = null) {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                let filtered = query.trim()
+                    ? USERS.filter(u => u.name.toLowerCase().includes(query.toLowerCase()))
+                    : USERS;
+
+                let start = 0;
+                if (nextPageUrl) {
+                    try {
+                        start = parseInt(new URL(nextPageUrl, location.href).searchParams.get('start')) || 0;
+                    } catch (_) {}
+                }
+
+                const page = filtered.slice(start, start + PAGE_SIZE);
+                const hasMore = start + PAGE_SIZE < filtered.length;
+
+                resolve({
+                    items: page,
+                    nextPageUrl: hasMore
+                        ? `/?query=${encodeURIComponent(query)}&start=${start + PAGE_SIZE}`
+                        : null,
+                });
+            }, nextPageUrl ? 120 : 40);
+        });
+    }
+
+    // ── Initialise instances ──────────────────────────────────────────────
+
+    const editorMention = new MentionJS(document.getElementById('editor'), {
+        trigger: '@',
+        searchFunction: searchUsers,
+        debounceDelay: 200,
+        noResultsText: 'Никого не найдено',
+        onMentionSelect(data) {
+            console.log('[contenteditable] selected:', data);
+        },
+    });
+
+    const textareaMention = new MentionJS(document.getElementById('textarea'), {
+        trigger: '@',
+        searchFunction: searchUsers,
+        debounceDelay: 200,
+        noResultsText: 'Никого не найдено',
+        onMentionSelect(data) {
+            console.log('[textarea] selected:', data);
+        },
+    });
+
+    // ── UI helpers ────────────────────────────────────────────────────────
+
+    function flash(type, message) {
+        const el = document.getElementById('status-' + type);
+        el.textContent = message;
+        el.classList.add('visible');
+        setTimeout(() => el.classList.remove('visible'), 3500);
+    }
+
+    function readMentions(type) {
+        const instance = type === 'editor' ? editorMention : textareaMention;
+        const mentions = instance.getMentions();
+        if (mentions.length === 0) {
+            flash(type, 'No mentions found');
+        } else {
+            flash(type, 'Mentions: ' + mentions.map(m => '@' + m.name).join(', '));
+        }
+    }
+
+    function pushMention(type) {
+        if (type === 'editor') {
+            editorMention.push({ id: 1, name: 'Анна Иванова' });
+        } else {
+            textareaMention.push({ id: 6, name: 'Мария Васильева' });
+        }
+    }
+
+    function clearField(type) {
+        const instance = type === 'editor' ? editorMention : textareaMention;
+        instance.clear();
+    }
+</script>
+</body>
+</html>

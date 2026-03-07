@@ -1,0 +1,31 @@
+{
+  "name": "@shelamkoff/mentionjs",
+  "version": "1.0.0",
+  "description": "Lightweight @-mention autocomplete for textarea and contenteditable. No dependencies.",
+  "main": "mention.js",
+  "types": "mention.d.ts",
+  "files": [
+    "mention.js",
+    "mention.css",
+    "mention.d.ts"
+  ],
+  "keywords": [
+    "mention",
+    "autocomplete",
+    "textarea",
+    "contenteditable",
+    "dropdown",
+    "at-mention",
+    "typeahead"
+  ],
+  "author": "shelamkoff",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shelamkoff/mentionjs"
+  },
+  "homepage": "https://github.com/shelamkoff/mentionjs#readme",
+  "bugs": {
+    "url": "https://github.com/shelamkoff/mentionjs/issues"
+  }
+}
