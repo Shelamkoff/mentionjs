@@ -59,7 +59,14 @@ const MentionJS = require('@shelamkoff/mentionjs');
 import MentionJS from '@shelamkoff/mentionjs';
 ```
 
-Or copy files manually and include via `<script>`:
+**CDN:**
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shelamkoff/mentionjs/dist/mention.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@shelamkoff/mentionjs/dist/mention.min.js"></script>
+```
+
+**Manual:**
 
 ```html
 <link rel="stylesheet" href="mention.css">

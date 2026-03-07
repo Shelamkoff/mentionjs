@@ -59,7 +59,14 @@ const MentionJS = require('@shelamkoff/mentionjs');
 import MentionJS from '@shelamkoff/mentionjs';
 ```
 
-Или скопируйте файлы вручную и подключите через `<script>`:
+**CDN:**
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shelamkoff/mentionjs/dist/mention.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@shelamkoff/mentionjs/dist/mention.min.js"></script>
+```
+
+**Вручную:**
 
 ```html
 <link rel="stylesheet" href="mention.css">
