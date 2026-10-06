@@ -266,9 +266,21 @@
                 throw new Error('MentionJS: first argument must be an HTMLElement');
             }
 
+            const tagName = element.tagName.toLowerCase();
+            const contentEditable = element.getAttribute('contenteditable');
+            const isTextarea = tagName === 'textarea';
+            const isContentEditable = element.isContentEditable ||
+                contentEditable === '' ||
+                contentEditable === 'true' ||
+                contentEditable === 'plaintext-only';
+
+            if (!isTextarea && !isContentEditable) {
+                throw new Error('MentionJS: element must be a textarea or contenteditable editing host');
+            }
+
             this._opts = Object.assign({}, DEFAULTS, options);
             this._el = element;
-            this._isTextarea = element.tagName.toLowerCase() === 'textarea';
+            this._isTextarea = isTextarea;
 
             this._ui = new DropdownUI(this._opts);
 
@@ -286,6 +298,9 @@
             this._debounceTimer = null;
             this._debounceReject = null;
             this._suppressNextInput = false;
+            this._skipNextContentEditableInput = false;
+            this._textareaValue = this._isTextarea ? element.value : null;
+            this._textareaEdit = null;
 
             this._h = {};
 
@@ -294,27 +309,39 @@
         }
 
         _bindElementEvents() {
+            this._h.blur = () => this._closeDropdown();
+
             if (this._isTextarea) {
+                this._h.beforeinput = (e) => this._onTextareaBeforeInput(e);
                 this._h.input = () => this._onTextareaInput();
                 this._h.keydown = (e) => this._onTextareaKeydown(e);
+                this._el.addEventListener('beforeinput', this._h.beforeinput);
                 this._el.addEventListener('input', this._h.input);
                 this._el.addEventListener('keydown', this._h.keydown);
             } else {
                 this._h.beforeinput = (e) => this._onBeforeInput(e);
+                this._h.input = () => this._onContentEditableInput();
                 this._h.keydown = (e) => this._onContentEditableKeydown(e);
                 this._el.addEventListener('beforeinput', this._h.beforeinput);
+                this._el.addEventListener('input', this._h.input);
                 this._el.addEventListener('keydown', this._h.keydown);
             }
+
+            this._el.addEventListener('blur', this._h.blur);
         }
 
         _unbindElementEvents() {
             if (this._isTextarea) {
+                this._el.removeEventListener('beforeinput', this._h.beforeinput);
                 this._el.removeEventListener('input', this._h.input);
                 this._el.removeEventListener('keydown', this._h.keydown);
             } else {
                 this._el.removeEventListener('beforeinput', this._h.beforeinput);
+                this._el.removeEventListener('input', this._h.input);
                 this._el.removeEventListener('keydown', this._h.keydown);
             }
+
+            this._el.removeEventListener('blur', this._h.blur);
         }
 
         _bindDocumentClick() {
@@ -370,13 +397,55 @@
             }
         }
 
-        async _onTextareaInput() {
-            if (this._suppressNextInput) {
-                this._suppressNextInput = false;
+        _onTextareaBeforeInput(e) {
+            const inputType = e.inputType || '';
+            const supported = new Set([
+                'insertText',
+                'insertCompositionText',
+                'insertFromPaste',
+                'insertFromDrop',
+                'insertReplacementText',
+                'deleteContentBackward',
+                'deleteContentForward',
+                'deleteByCut',
+            ]);
+
+            if (!supported.has(inputType)) {
+                this._textareaEdit = null;
                 return;
             }
 
-            this._syncMentionPositions();
+            let start = this._el.selectionStart ?? 0;
+            let end = this._el.selectionEnd ?? start;
+
+            if (start === end) {
+                if (inputType === 'deleteContentBackward' && start > 0) {
+                    start--;
+                } else if (inputType === 'deleteContentForward' && end < this._el.value.length) {
+                    end++;
+                }
+            }
+
+            this._textareaEdit = {
+                start,
+                end,
+                value: this._el.value,
+            };
+        }
+
+        async _onTextareaInput() {
+            if (this._suppressNextInput) {
+                this._suppressNextInput = false;
+                this._textareaValue = this._el.value;
+                this._textareaEdit = null;
+                return;
+            }
+
+            const previousValue = this._textareaValue ?? '';
+            const currentValue = this._el.value;
+            this._syncMentionPositions(previousValue, currentValue, this._textareaEdit);
+            this._textareaValue = currentValue;
+            this._textareaEdit = null;
 
             const pos = this._el.selectionStart;
             const token = this._findTokenAtCursor(this._el.value, pos);
@@ -433,6 +502,38 @@
             } else {
                 this._closeDropdown();
             }
+        }
+
+        async _onContentEditableInput() {
+            if (this._skipNextContentEditableInput) {
+                this._skipNextContentEditableInput = false;
+                return;
+            }
+
+            const sel = window.getSelection();
+            const span = this._getMentionSpan(sel);
+
+            if (!span) {
+                if (this._ui.el || this._mentionSpan) this._closeDropdown();
+                return;
+            }
+
+            const text = span.textContent || '';
+
+            if (!text.startsWith(this._opts.trigger)) {
+                this._invalidateMentionMetadata(span);
+                this._unwrapMentionSpan(span, sel);
+                this._closeDropdown();
+                return;
+            }
+
+            this._invalidateMentionMetadata(span);
+            span.classList.add('active');
+            this._mentionSpan = span;
+
+            const items = await this._search(text.substring(this._opts.trigger.length));
+            if (items === null) return;
+            if (this._inDOM(span)) this._openDropdown(items);
         }
 
         async _handleInputInsideSpan(e, span, sel) {
@@ -527,6 +628,7 @@
                 }
 
                 e.preventDefault();
+                this._invalidateMentionMetadata(span);
 
                 const newText   = removeCharAt(spanText, offset - 1);
                 const newOffset = offset - 1;
@@ -542,7 +644,7 @@
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
 
-                const items = await this._search(newText.substring(1));
+                const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
                 if (this._inDOM(span)) this._openDropdown(items);
                 return;
@@ -559,6 +661,7 @@
                 }
 
                 e.preventDefault();
+                this._invalidateMentionMetadata(span);
 
                 const newText = removeCharAt(spanText, offset);
 
@@ -597,7 +700,7 @@
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
 
-                const items = await this._search(newText.substring(1));
+                const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
                 if (this._inDOM(span)) this._openDropdown(items);
                 return;
@@ -607,9 +710,11 @@
                 const insertAt = cursorInText ?? spanText.length;
                 const newText = spanText.substring(0, insertAt) + e.data + spanText.substring(insertAt);
 
+                this._invalidateMentionMetadata(span);
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
-                const items = await this._search(newText.substring(1));
+                this._skipNextContentEditableInput = true;
+                const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
                 if (this._inDOM(span)) this._openDropdown(items);
             }
@@ -696,6 +801,8 @@
             const after = this._el.value.substring(this._mentionEnd);
 
             this._el.value = before + mentionText + ' ' + after;
+            this._textareaValue = this._el.value;
+            this._textareaEdit = null;
 
             const oldLen = this._mentionEnd - this._mentionStart;
             const newLen = mentionText.length + 1;
@@ -768,11 +875,75 @@
             if (!sel) return null;
             const node = sel.anchorNode;
             if (!node) return null;
-            if (node.nodeName === 'SPAN' && node.classList?.contains('mention')) return node;
-            if (node.nodeType === Node.TEXT_NODE && node.parentElement?.classList?.contains('mention')) {
-                return node.parentElement;
+
+            const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+            const span = element?.closest?.('span.mention') ?? null;
+
+            return span && this._el.contains(span) ? span : null;
+        }
+
+        _invalidateMentionMetadata(span) {
+            delete span.dataset.mentionId;
+            delete span.dataset.mentionName;
+        }
+
+        _unwrapMentionSpan(span, sel = window.getSelection()) {
+            const text = span.textContent || '';
+            let offset = text.length;
+
+            if (sel?.anchorNode?.nodeType === Node.TEXT_NODE && span.contains(sel.anchorNode)) {
+                offset = sel.anchorOffset;
             }
+
+            const textNode = document.createTextNode(text);
+            span.replaceWith(textNode);
+
+            if (sel) {
+                setCaretAt(textNode, Math.min(offset, text.length));
+            }
+
+            if (this._mentionSpan === span) this._mentionSpan = null;
+            return textNode;
+        }
+
+        _findEdgeTextNode(node, fromEnd) {
+            if (!node) return null;
+            if (node.nodeType === Node.TEXT_NODE) return node;
+            if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+            const children = node.childNodes;
+            if (fromEnd) {
+                for (let i = children.length - 1; i >= 0; i--) {
+                    const found = this._findEdgeTextNode(children[i], true);
+                    if (found) return found;
+                }
+            } else {
+                for (let i = 0; i < children.length; i++) {
+                    const found = this._findEdgeTextNode(children[i], false);
+                    if (found) return found;
+                }
+            }
+
             return null;
+        }
+
+        _deleteEdgeCharacter(node, fromEnd) {
+            const textNode = this._findEdgeTextNode(node, fromEnd);
+            if (textNode && textNode.textContent.length > 0) {
+                textNode.textContent = fromEnd
+                    ? textNode.textContent.slice(0, -1)
+                    : textNode.textContent.substring(1);
+
+                if (textNode.textContent.length === 0) textNode.remove();
+                return true;
+            }
+
+            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+                node.remove();
+                return true;
+            }
+
+            return false;
         }
 
         _canInsertMentionHere(sel) {
@@ -824,13 +995,13 @@
                 prev.classList.add('active');
                 setCaretAt(prev.firstChild, prev.textContent.length);
                 this._mentionSpan = prev;
-                const query = prev.textContent.substring(1);
+                const query = prev.textContent.substring(this._opts.trigger.length);
                 this._search(query).then((items) => {
                     if (items === null) return;
                     if (this._inDOM(prev)) this._openDropdown(items);
                 });
             } else if (prev) {
-                prev.remove();
+                this._deleteEdgeCharacter(prev, true);
                 setCaretBeforeNode(span);
             }
         }
@@ -855,12 +1026,13 @@
         _deleteForwardAfterNode(node) {
             const next = node.nextSibling;
             if (!next) return;
-            if (next.nodeType === Node.TEXT_NODE && next.textContent.length > 0) {
-                next.textContent = next.textContent.substring(1);
-                if (next.textContent.length === 0) next.remove();
-            } else {
+
+            if (next.classList?.contains('mention')) {
                 next.remove();
+                return;
             }
+
+            this._deleteEdgeCharacter(next, false);
         }
 
         _insertBr(sel) {
@@ -882,54 +1054,60 @@
             if (triggerIdx === -1) return null;
             if (triggerIdx > 0 && !/\s/.test(text[triggerIdx - 1])) return null;
 
-            const query = before.substring(triggerIdx + 1);
+            const triggerEnd = triggerIdx + this._opts.trigger.length;
+            const query = before.substring(triggerEnd);
             if (/\s/.test(query)) return null;
-            if (triggerIdx + 1 + query.length !== position) return null;
+            if (triggerEnd + query.length !== position) return null;
 
             return { start: triggerIdx, end: position, query };
         }
 
-        // Recalculate mention positions after text changes.
-        // Uses a Set to prevent two mentions from claiming the same text occurrence,
-        // and picks the closest match to each mention's original position.
-        _syncMentionPositions() {
-            const text = this._el.value;
-            const trigger = this._opts.trigger;
-            const used = new Set();
+        // Keep committed textarea mention ranges attached to the exact edit operation.
+        // User edits are captured in beforeinput; the text-diff fallback is only for
+        // programmatic changes that dispatch input without beforeinput.
+        _syncMentionPositions(previousText = this._textareaValue ?? '', text = this._el.value, edit = this._textareaEdit) {
+            if (previousText === text) return;
 
-            this._mentions.sort((a, b) => a.start - b.start);
+            let editStart;
+            let editEnd;
 
-            this._mentions = this._mentions.filter((m) => {
-                const target = trigger + m.name;
+            if (edit && edit.value === previousText) {
+                editStart = edit.start;
+                editEnd = edit.end;
+            } else {
+                const previousLength = previousText.length;
+                const currentLength = text.length;
+                let prefix = 0;
 
-                // Check expected position first
-                if (m.start >= 0 && m.end <= text.length &&
-                    text.substring(m.start, m.end) === target &&
-                    (m.start === 0 || /\s/.test(text[m.start - 1])) &&
-                    !used.has(m.start)) {
-                    used.add(m.start);
-                    return true;
+                while (
+                    prefix < previousLength &&
+                    prefix < currentLength &&
+                    previousText[prefix] === text[prefix]
+                ) {
+                    prefix++;
                 }
 
-                // Scan all occurrences, pick closest to original position
-                let bestIdx = -1;
-                let bestDist = Infinity;
-                let idx = text.indexOf(target);
-                while (idx !== -1) {
-                    if (!used.has(idx) && (idx === 0 || /\s/.test(text[idx - 1]))) {
-                        const dist = Math.abs(idx - m.start);
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestIdx = idx;
-                        }
-                    }
-                    idx = text.indexOf(target, idx + 1);
+                let suffix = 0;
+                while (
+                    suffix < previousLength - prefix &&
+                    suffix < currentLength - prefix &&
+                    previousText[previousLength - 1 - suffix] === text[currentLength - 1 - suffix]
+                ) {
+                    suffix++;
                 }
 
-                if (bestIdx !== -1) {
-                    m.start = bestIdx;
-                    m.end = bestIdx + target.length;
-                    used.add(bestIdx);
+                editStart = prefix;
+                editEnd = previousLength - suffix;
+            }
+
+            const delta = text.length - previousText.length;
+
+            this._mentions = this._mentions.filter((mention) => {
+                if (mention.end <= editStart) return true;
+
+                if (mention.start >= editEnd) {
+                    mention.start += delta;
+                    mention.end += delta;
                     return true;
                 }
 
@@ -1151,7 +1329,11 @@
             if (this._isTextarea) {
                 return this._mentions.map(({ id, name, start, end }) => ({ id, name, start, end }));
             }
-            return Array.from(this._el.querySelectorAll('span.mention:not(.active)')).map((el) => ({
+            return Array.from(
+                this._el.querySelectorAll(
+                    'span.mention:not(.active)[data-mention-id][data-mention-name]'
+                )
+            ).map((el) => ({
                 id: el.dataset.mentionId,
                 name: el.dataset.mentionName,
             }));
@@ -1165,25 +1347,64 @@
             if (this._isTextarea) {
                 const text = this._el.value;
                 const mentionText = this._opts.trigger + mentionData.name;
-                this._el.value = text + mentionText + ' ';
+                const hasCaret = document.activeElement === this._el;
+                const start = hasCaret ? (this._el.selectionStart ?? text.length) : text.length;
+                const end = hasCaret ? (this._el.selectionEnd ?? start) : start;
+                const insertion = mentionText + ' ';
+                const delta = insertion.length - (end - start);
+
+                this._mentions = this._mentions.filter((mention) => (
+                    mention.end <= start || mention.start >= end
+                ));
+
+                this._mentions.forEach((mention) => {
+                    if (mention.start >= end) {
+                        mention.start += delta;
+                        mention.end += delta;
+                    }
+                });
+
+                this._el.value = text.substring(0, start) + insertion + text.substring(end);
                 this._mentions.push({
                     id: mentionData.id,
                     name: mentionData.name,
-                    start: text.length,
-                    end: text.length + mentionText.length,
+                    start,
+                    end: start + mentionText.length,
                 });
-                const pos = this._el.value.length;
+
+                const pos = start + insertion.length;
+                this._textareaValue = this._el.value;
+                this._textareaEdit = null;
                 this._el.setSelectionRange(pos, pos);
                 this._el.focus();
             } else {
-                this._el.focus();
+                const sel = window.getSelection();
+                let range = null;
+
+                if (sel?.rangeCount) {
+                    const candidate = sel.getRangeAt(0);
+                    const container = candidate.commonAncestorContainer;
+                    if (container === this._el || this._el.contains(container)) {
+                        range = candidate;
+                    }
+                }
+
                 const span = createElement('span', 'mention');
                 span.dataset.mentionId = String(mentionData.id);
                 span.dataset.mentionName = mentionData.name;
                 span.textContent = this._opts.trigger + mentionData.name;
-                this._el.appendChild(span);
                 const space = document.createTextNode('\u00A0');
-                this._el.appendChild(space);
+
+                if (range) {
+                    range.deleteContents();
+                    range.insertNode(span);
+                    span.after(space);
+                } else {
+                    this._el.appendChild(span);
+                    this._el.appendChild(space);
+                }
+
+                this._el.focus();
                 setCaretAt(space, 1);
             }
         }
@@ -1195,6 +1416,8 @@
             if (this._isTextarea) {
                 this._el.value = '';
                 this._mentions = [];
+                this._textareaValue = '';
+                this._textareaEdit = null;
             } else {
                 this._el.innerHTML = '';
             }
