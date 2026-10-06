@@ -2781,3 +2781,84 @@ describe('MentionJS stale async UI isolation', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS framework-controlled textarea commit', () => {
+    it('reconciles when an earlier external input listener replaces the committed value', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        textarea.addEventListener('input', (event) => {
+            if (!event.isTrusted && textarea.value.startsWith('@Alice')) {
+                textarea.value = 'controlled';
+                textarea.setSelectionRange(
+                    textarea.value.length,
+                    textarea.value.length
+                );
+            }
+        });
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('controlled');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('reconciles when a later external input listener replaces the committed value', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.addEventListener('input', (event) => {
+            if (!event.isTrusted && textarea.value.startsWith('@Alice')) {
+                textarea.value = 'controlled';
+                textarea.setSelectionRange(
+                    textarea.value.length,
+                    textarea.value.length
+                );
+            }
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('controlled');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+});

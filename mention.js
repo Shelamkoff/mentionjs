@@ -921,7 +921,6 @@
         async _onTextareaInput() {
             if (this._suppressNextInput) {
                 this._suppressNextInput = false;
-                this._textareaMentions.acknowledge(this._el.value);
                 return;
             }
 
@@ -1458,6 +1457,7 @@
 
             this._suppressNextInput = true;
             this._el.dispatchEvent(new Event('input', { bubbles: true }));
+            this._textareaMentions.reconcile(this._el.value);
             this._fireSelect(data);
         }
 
