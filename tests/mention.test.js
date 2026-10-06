@@ -2929,3 +2929,39 @@ describe('MentionJS detached host lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS teardown after textarea deletion keys', () => {
+    it('does not mutate restored accessibility state after destroy()', async () => {
+        const textarea = document.createElement('textarea');
+        textarea.setAttribute('role', 'textbox');
+        textarea.setAttribute('aria-expanded', 'legacy');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Backspace',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        mention.destroy();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        expect(textarea.getAttribute('role')).toBe('textbox');
+        expect(textarea.getAttribute('aria-expanded')).toBe('legacy');
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+    });
+});

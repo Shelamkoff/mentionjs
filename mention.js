@@ -952,16 +952,6 @@
                 return;
             }
 
-            if ((e.key === 'Backspace' || e.key === 'Delete') && this._ui.el) {
-                setTimeout(() => {
-                    const hasSelection = this._el.selectionStart !== this._el.selectionEnd;
-                    const token = hasSelection
-                        ? null
-                        : this._findTokenAtCursor(this._el.value, this._el.selectionStart);
-                    if (!token) this._closeDropdown();
-                }, 0);
-            }
-
             if (!this._ui.el) return;
 
             if (this._searchSession.items.length === 0) {
