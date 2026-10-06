@@ -3269,3 +3269,64 @@ describe('MentionJS runtime option validation', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS Shadow DOM textarea focus semantics', () => {
+    it('push() inserts at the current caret inside a shadow-root textarea', () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const textarea = document.createElement('textarea');
+        textarea.value = 'hello world';
+        shadow.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(6, 6);
+
+        mention.push({ id: 1, name: 'Alice' });
+
+        expect(textarea.value).toBe('hello @Alice world');
+        expect(textarea.selectionStart).toBe(13);
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 6, end: 12 },
+        ]);
+
+        mention.destroy();
+    });
+
+    it('reopens search after a caret move within a shadow-root token', async () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const textarea = document.createElement('textarea');
+        shadow.appendChild(textarea);
+
+        const searchFunction = vi.fn().mockResolvedValue([
+            { id: 1, name: 'Alice' },
+        ]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@abc';
+        textarea.setSelectionRange(4, 4);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('abc', null);
+        });
+
+        textarea.setSelectionRange(2, 2);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('a', null);
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+
+        mention.destroy();
+    });
+});

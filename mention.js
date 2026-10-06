@@ -747,6 +747,14 @@
             activeInstances.set(this._el, this);
         }
 
+        _isHostFocused() {
+            const root = this._el.getRootNode?.();
+            if (root && 'activeElement' in root) {
+                return root.activeElement === this._el;
+            }
+            return document.activeElement === this._el;
+        }
+
         _configureAccessibility() {
             const attributes = [
                 'role',
@@ -957,7 +965,7 @@
                             this._closeDropdown();
                             return;
                         }
-                        if (document.activeElement === this._el) this._openDropdown(items);
+                        if (this._isHostFocused()) this._openDropdown(items);
                     });
                 }
                 return;
@@ -2070,7 +2078,7 @@
             if (this._isTextarea) {
                 const text = this._el.value;
                 const mentionText = this._opts.trigger + mentionData.name;
-                const hasCaret = document.activeElement === this._el;
+                const hasCaret = this._isHostFocused();
                 const start = hasCaret ? (this._el.selectionStart ?? text.length) : text.length;
                 const end = hasCaret ? (this._el.selectionEnd ?? start) : start;
                 const after = text.substring(end);
