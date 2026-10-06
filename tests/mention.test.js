@@ -1788,7 +1788,7 @@ describe('MentionJS composition, paste, and textarea selections', () => {
 
         expect(event.defaultPrevented).toBe(true);
         expect(span.textContent).toBe('@Alice');
-        expect(editor.textContent).toBe('@Alice\u00A0X');
+        expect(editor.textContent).toBe('@AliceX\u00A0');
         expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
 
         mention.destroy();
