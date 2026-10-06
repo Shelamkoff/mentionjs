@@ -303,6 +303,7 @@
             this._items = [];
             this._nextPageUrl = null;
             this._isLoadingMore = false;
+            this._loadingMoreGeneration = 0;
             this._debounceTimer = null;
             this._debounceReject = null;
         }
@@ -323,8 +324,21 @@
             return this._isLoadingMore;
         }
 
-        setLoadingMore(value) {
-            this._isLoadingMore = value;
+        beginLoadingMore() {
+            if (this._isLoadingMore) return null;
+            this._isLoadingMore = true;
+            return ++this._loadingMoreGeneration;
+        }
+
+        finishLoadingMore(generation) {
+            if (generation === this._loadingMoreGeneration) {
+                this._isLoadingMore = false;
+            }
+        }
+
+        _invalidateLoadingMore() {
+            this._loadingMoreGeneration++;
+            this._isLoadingMore = false;
         }
 
         async search(query, nextPageUrl = null) {
@@ -332,7 +346,7 @@
                 this._currentQuery = query;
                 this._cancelDebounce();
                 this._nextPageUrl = null;
-                this._isLoadingMore = false;
+                this._invalidateLoadingMore();
             }
 
             const requestId = ++this._requestId;
@@ -376,7 +390,7 @@
             this._cancelDebounce();
             this._items = [];
             this._nextPageUrl = null;
-            this._isLoadingMore = false;
+            this._invalidateLoadingMore();
         }
 
         _cancelDebounce() {
@@ -1265,14 +1279,19 @@
         }
 
         _getMentionSpan(sel) {
-            if (!sel) return null;
-            const node = sel.anchorNode;
-            if (!node) return null;
+            if (!sel || sel.rangeCount === 0) return null;
 
-            const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-            const span = element?.closest?.('span.mention') ?? null;
+            const range = sel.getRangeAt(0);
+            const findSpan = (node) => {
+                const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+                const span = element?.closest?.('span.mention') ?? null;
+                return span && this._el.contains(span) && this._isMentionSpan(span) ? span : null;
+            };
 
-            return span && this._el.contains(span) && this._isMentionSpan(span) ? span : null;
+            const startSpan = findSpan(range.startContainer);
+            const endSpan = findSpan(range.endContainer);
+
+            return startSpan && startSpan === endSpan ? startSpan : null;
         }
 
         _invalidateMentionMetadata(span) {
@@ -1599,8 +1618,11 @@
         }
 
         async _loadMoreResults() {
-            if (this._searchSession.isLoadingMore || !this._searchSession.nextPageUrl) return;
-            this._searchSession.setLoadingMore(true);
+            if (!this._searchSession.nextPageUrl) return;
+
+            const loadingGeneration = this._searchSession.beginLoadingMore();
+            if (loadingGeneration === null) return;
+
             this._ui.showLoading();
             try {
                 const prevLen = this._searchSession.items.length;
@@ -1615,7 +1637,7 @@
                 console.warn('MentionJS: load more failed', err);
                 this._ui.hideLoading();
             } finally {
-                this._searchSession.setLoadingMore(false);
+                this._searchSession.finishLoadingMore(loadingGeneration);
             }
         }
 

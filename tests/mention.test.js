@@ -1030,3 +1030,131 @@ describe('MentionJS contenteditable input events', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS async and selection races', () => {
+    it('does not let an old pagination request unlock a newer pagination request', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveOldPage;
+        let resolveNewPage;
+        const oldPage = new Promise((resolve) => { resolveOldPage = resolve; });
+        const newPage = new Promise((resolve) => { resolveNewPage = resolve; });
+
+        const searchFunction = vi.fn((query, nextPageUrl) => {
+            if (nextPageUrl === '/old') return oldPage;
+            if (nextPageUrl === '/new') return newPage;
+            if (query === 'n') {
+                return Promise.resolve({
+                    items: [
+                        { id: 3, name: 'New One' },
+                        { id: 4, name: 'New Two' },
+                    ],
+                    nextPageUrl: '/new',
+                });
+            }
+            return Promise.resolve({
+                items: [
+                    { id: 1, name: 'Old One' },
+                    { id: 2, name: 'Old Two' },
+                ],
+                nextPageUrl: '/old',
+            });
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]').length).toBe(2);
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', '/old');
+        });
+
+        textarea.value = '@n';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('New One');
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('n', '/new');
+        });
+
+        resolveOldPage({
+            items: [{ id: 5, name: 'Old Three' }],
+            nextPageUrl: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+        document.querySelector('.mention-dropdown')
+            .dispatchEvent(new Event('scroll', { bubbles: true }));
+
+        expect(
+            searchFunction.mock.calls.filter(([, url]) => url === '/new')
+        ).toHaveLength(1);
+
+        resolveNewPage({
+            items: [{ id: 6, name: 'New Three' }],
+            nextPageUrl: null,
+        });
+
+        mention.destroy();
+    });
+
+    it('does not treat a selection crossing a mention boundary as editing inside the mention', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const tail = document.createTextNode('tail');
+        editor.appendChild(tail);
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(span.firstChild, 2);
+        range.setEnd(tail, 2);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const event = beforeInput(editor, 'deleteContentBackward');
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(span.textContent).toBe('@Alice');
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+
+        mention.destroy();
+    });
+});
