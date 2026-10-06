@@ -265,9 +265,11 @@ Import `mention.css` for default styles. All classes are customizable:
 | `mention.js` | Library source |
 | `mention.css` | Default stylesheet |
 | `mention.d.ts` | TypeScript type definitions |
-| `dist/mention.min.js` | Minified JS (~22 KB) |
-| `dist/mention.min.css` | Minified CSS (~2 KB) |
+| `dist/mention.min.js` | Generated minified JS (`npm run build` / `prepack`) |
+| `dist/mention.min.css` | Generated minified CSS (`npm run build` / `prepack`) |
 | `demo.html` | Interactive demo page |
+
+The `dist/` directory is generated and is not stored in Git. It is included in published npm packages because `prepack` runs the build automatically.
 
 ## Browser Support
 

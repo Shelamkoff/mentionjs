@@ -265,9 +265,11 @@ m.push({ id: 1, name: 'Анна Иванова' });
 | `mention.js` | Исходный код библиотеки |
 | `mention.css` | Стили по умолчанию |
 | `mention.d.ts` | TypeScript типы |
-| `dist/mention.min.js` | Минифицированный JS (~22 КБ) |
-| `dist/mention.min.css` | Минифицированный CSS (~2 КБ) |
+| `dist/mention.min.js` | Генерируемый минифицированный JS (`npm run build` / `prepack`) |
+| `dist/mention.min.css` | Генерируемый минифицированный CSS (`npm run build` / `prepack`) |
 | `demo.html` | Интерактивная демо-страница |
+
+Каталог `dist/` генерируется и не хранится в Git. В опубликованный npm-пакет он включается автоматически: `prepack` запускает сборку перед упаковкой.
 
 ## Поддержка браузеров
 
