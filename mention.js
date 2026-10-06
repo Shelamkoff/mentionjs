@@ -848,6 +848,7 @@
         }
 
         _bindSelectionChange() {
+            if (this._h.selectionChange) return;
             this._h.selectionChange = () => this._onSelectionChange();
             document.addEventListener('selectionchange', this._h.selectionChange);
         }
@@ -855,11 +856,16 @@
         _unbindSelectionChange() {
             if (this._h.selectionChange) {
                 document.removeEventListener('selectionchange', this._h.selectionChange);
+                this._h.selectionChange = null;
             }
         }
 
         _onSelectionChange() {
-            if (!this._ui.el) return;
+            const hasActiveContext =
+                !!this._ui.el ||
+                this._mentionStart !== null ||
+                !!this._mentionSpan;
+            if (!hasActiveContext) return;
 
             if (this._isTextarea) {
                 if (this._el.selectionStart !== this._el.selectionEnd) {
@@ -1855,6 +1861,7 @@
         }
 
         async _search(query, nextPageUrl = null) {
+            if (!nextPageUrl) this._bindSelectionChange();
             return await this._searchSession.search(query, nextPageUrl);
         }
 

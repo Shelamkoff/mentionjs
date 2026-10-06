@@ -2089,3 +2089,106 @@ describe('MentionJS editing-host and preloaded mention ownership', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS pending selection lifecycle', () => {
+    it('cancels a pending textarea search when the caret moves outside the token', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveSearch;
+        const searchFunction = vi.fn(() => new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@alice tail';
+        textarea.setSelectionRange(6, 6);
+        input(textarea);
+
+        expect(searchFunction).toHaveBeenCalledWith('alice', null);
+
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('supersedes a pending textarea query when the caret moves within the token', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveOld;
+        const old = new Promise((resolve) => { resolveOld = resolve; });
+        const searchFunction = vi.fn((query) => (
+            query === 'alice'
+                ? old
+                : Promise.resolve([{ id: 2, name: 'Al' }])
+        ));
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@alice';
+        textarea.setSelectionRange(6, 6);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('alice', null);
+        });
+
+        textarea.setSelectionRange(3, 3);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('al', null);
+            expect(document.querySelector('.mention-name')?.textContent).toBe('Al');
+        });
+
+        resolveOld([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-name')?.textContent).toBe('Al');
+        mention.destroy();
+    });
+
+    it('cancels a pending contenteditable search when the caret moves out of its token', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.appendChild(document.createTextNode('tail'));
+        document.body.appendChild(editor);
+
+        let resolveSearch;
+        const searchFunction = vi.fn(() => new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+        const mention = new MentionJS(editor, { searchFunction });
+
+        editor.focus();
+        setCaret(editor.firstChild, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        expect(searchFunction).toHaveBeenCalledWith('', null);
+
+        const tail = editor.lastChild;
+        setCaret(tail, tail.textContent.length);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(editor.querySelector('span.mention')).toBeNull();
+        mention.destroy();
+    });
+});
