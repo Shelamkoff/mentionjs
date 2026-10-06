@@ -820,6 +820,12 @@
         }
 
         _onTextareaKeydown(e) {
+            if (e.key === 'Escape' && (this._ui.el || this._mentionStart !== null)) {
+                e.preventDefault();
+                this._closeDropdown();
+                return;
+            }
+
             if ((e.key === 'Backspace' || e.key === 'Delete') && this._ui.el) {
                 setTimeout(() => {
                     const token = this._findTokenAtCursor(this._el.value, this._el.selectionStart);
@@ -1107,6 +1113,12 @@
         async _onContentEditableKeydown(e) {
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
+
+            if (e.key === 'Escape' && (this._ui.el || this._mentionSpan)) {
+                e.preventDefault();
+                this._closeDropdown();
+                return;
+            }
 
             if (e.key === 'Enter') {
                 if (span?.classList.contains('active') || this._ui.el) {

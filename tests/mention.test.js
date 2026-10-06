@@ -298,6 +298,8 @@ describe('MentionJS interaction consistency', () => {
             expect(document.querySelector('.mention-dropdown')).not.toBeNull();
         });
 
+        externalInput.mockClear();
+
         editor.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Enter',
             bubbles: true,
@@ -1155,6 +1157,70 @@ describe('MentionJS async and selection races', () => {
         expect(span.textContent).toBe('@Alice');
         expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
 
+        mention.destroy();
+    });
+});
+
+
+describe('MentionJS pending search cancellation', () => {
+    it('Escape cancels a pending textarea search before the dropdown opens', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveSearch;
+        const searchFunction = vi.fn(() => new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('Escape cancels a pending contenteditable search and releases the token', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        let resolveSearch;
+        const searchFunction = vi.fn(() => new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+        const mention = new MentionJS(editor, { searchFunction });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.querySelector('[data-mentionjs-token]')).toBeNull();
+        expect(editor.textContent).toBe('@');
         mention.destroy();
     });
 });
