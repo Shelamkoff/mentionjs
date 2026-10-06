@@ -575,6 +575,7 @@
             this._mentionSpan = null;
             this._mentionCounter = 0;
             this._suppressNextInput = false;
+            this._suppressSyntheticContentEditableInput = false;
 
             this._h = {};
             this._a11yOriginal = {};
@@ -839,6 +840,7 @@
                 e.preventDefault();
                 const newSpan = this._insertMentionSpan(sel);
                 this._mentionSpan = newSpan;
+                this._dispatchContentEditableInput('insertText', this._opts.trigger);
                 const items = await this._search('');
                 if (items === null) return;
                 if (this._inDOM(newSpan)) this._openDropdown(items);
@@ -848,6 +850,8 @@
         }
 
         async _onContentEditableInput() {
+            if (this._suppressSyntheticContentEditableInput) return;
+
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
@@ -887,19 +891,25 @@
                 : (anchorNode === span ? anchorOffset : null);
 
             const isAtStart = cursorInText === 0;
-            const isAtEnd   = cursorInText === spanText.length;
+            const isAtEnd = cursorInText === spanText.length;
 
             if (isAtStart) {
                 e.preventDefault();
                 this._closeDropdown();
+
                 if (e.inputType === 'insertText' && e.data) {
                     const tn = document.createTextNode(e.data);
                     span.parentNode.insertBefore(tn, span);
                     setCaretAt(tn, e.data.length);
+                    this._dispatchContentEditableInput(e.inputType, e.data);
                 } else if (e.inputType === 'deleteContentBackward') {
-                    this._backspaceBeforeSpan(span, sel);
+                    if (this._backspaceBeforeSpan(span, sel)) {
+                        this._dispatchContentEditableInput(e.inputType);
+                    }
                 } else if (e.inputType === 'deleteContentForward') {
-                    this._deleteForwardInSpan(span, spanText);
+                    if (this._deleteForwardInSpan(span, spanText)) {
+                        this._dispatchContentEditableInput(e.inputType);
+                    }
                 }
                 return;
             }
@@ -917,11 +927,14 @@
                         span.after(tn);
                         setCaretAt(tn, 1);
                     }
+                    this._dispatchContentEditableInput(e.inputType, e.data);
                     return;
                 }
                 if (e.inputType === 'deleteContentForward') {
                     e.preventDefault();
-                    this._deleteForwardAfterNode(span);
+                    if (this._deleteForwardAfterNode(span)) {
+                        this._dispatchContentEditableInput(e.inputType);
+                    }
                     return;
                 }
             }
@@ -929,10 +942,13 @@
             if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
                 e.preventDefault();
                 if (isActive && this._searchSession.items.length > 0) return;
+
                 span.classList.remove('active');
                 this._closeDropdown();
                 setCaretAfterNode(span);
-                this._insertBr(window.getSelection());
+                if (this._insertBr(window.getSelection())) {
+                    this._dispatchContentEditableInput(e.inputType);
+                }
                 return;
             }
 
@@ -942,8 +958,10 @@
                 if (spanText.length === 1) {
                     e.preventDefault();
                     this._closeDropdown();
-                    const prev = span.previousSibling, next = span.nextSibling;
+                    const prev = span.previousSibling;
+                    const next = span.nextSibling;
                     span.remove();
+
                     const range = document.createRange();
                     if (prev?.nodeType === Node.TEXT_NODE) range.setStart(prev, prev.textContent.length);
                     else if (next) range.setStartBefore(next);
@@ -951,10 +969,12 @@
                     range.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(range);
+
+                    this._dispatchContentEditableInput(e.inputType);
                     return;
                 }
 
-                // Backspace over the trigger char → unwrap to plain text
+                // Backspace over the trigger char → unwrap to plain text.
                 if (offset === 1 && spanText.startsWith(this._opts.trigger)) {
                     e.preventDefault();
                     const tn = document.createTextNode(spanText.substring(1));
@@ -962,22 +982,24 @@
                     span.remove();
                     this._closeDropdown();
                     setCaretAt(tn, 0);
+                    this._dispatchContentEditableInput(e.inputType);
                     return;
                 }
 
                 e.preventDefault();
                 this._invalidateMentionMetadata(span);
 
-                const newText   = removeCharAt(spanText, offset - 1);
+                const newText = removeCharAt(spanText, offset - 1);
                 const newOffset = offset - 1;
-
                 const tn = span.firstChild;
+
                 if (tn?.nodeType === Node.TEXT_NODE) {
                     tn.textContent = newText;
                 } else {
                     span.textContent = newText;
                 }
                 setCaretAt(span.firstChild, newOffset);
+                this._dispatchContentEditableInput(e.inputType);
 
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
@@ -991,10 +1013,12 @@
             if (e.inputType === 'deleteContentForward') {
                 const offset = cursorInText ?? spanText.length;
 
-                // At end of span → delete next sibling content
+                // At end of span → delete next sibling content.
                 if (offset >= spanText.length) {
                     e.preventDefault();
-                    this._deleteForwardAfterNode(span);
+                    if (this._deleteForwardAfterNode(span)) {
+                        this._dispatchContentEditableInput(e.inputType);
+                    }
                     return;
                 }
 
@@ -1004,9 +1028,11 @@
                 const newText = removeCharAt(spanText, offset);
 
                 if (newText.length === 0) {
-                    const prev = span.previousSibling, next = span.nextSibling;
+                    const prev = span.previousSibling;
+                    const next = span.nextSibling;
                     span.remove();
                     this._closeDropdown();
+
                     const range = document.createRange();
                     if (next) range.setStartBefore(next);
                     else if (prev?.nodeType === Node.TEXT_NODE) range.setStart(prev, prev.textContent.length);
@@ -1014,16 +1040,19 @@
                     range.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(range);
+
+                    this._dispatchContentEditableInput(e.inputType);
                     return;
                 }
 
-                // Deleted the trigger character → unwrap to plain text
+                // Deleted the trigger character → unwrap to plain text.
                 if (offset === 0 && !newText.startsWith(this._opts.trigger)) {
                     const tn = document.createTextNode(newText);
                     span.parentNode.insertBefore(tn, span);
                     span.remove();
                     this._closeDropdown();
                     setCaretAt(tn, 0);
+                    this._dispatchContentEditableInput(e.inputType);
                     return;
                 }
 
@@ -1034,6 +1063,7 @@
                     span.textContent = newText;
                 }
                 setCaretAt(span.firstChild, offset);
+                this._dispatchContentEditableInput(e.inputType);
 
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
@@ -1051,6 +1081,9 @@
                 this._invalidateMentionMetadata(span);
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
+
+                // Browser mutation is not prevented here. The following native input
+                // event reconciles the real DOM and supersedes this predicted query.
                 const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
                 if (this._inDOM(span)) this._openDropdown(items);
@@ -1076,7 +1109,9 @@
                 if (span) {
                     e.preventDefault();
                     setCaretAfterNode(span);
-                    this._insertBr(window.getSelection());
+                    if (this._insertBr(window.getSelection())) {
+                        this._dispatchContentEditableInput('insertParagraph');
+                    }
                     return;
                 }
             }
@@ -1186,8 +1221,31 @@
             }
 
             this._closeDropdown();
-            this._el.dispatchEvent(new Event('input', { bubbles: true }));
+            this._dispatchContentEditableInput(
+                'insertReplacementText',
+                this._opts.trigger + data.name
+            );
             this._fireSelect(data);
+        }
+
+        _dispatchContentEditableInput(inputType = '', data = null) {
+            this._suppressSyntheticContentEditableInput = true;
+
+            try {
+                let event;
+                try {
+                    event = new InputEvent('input', {
+                        bubbles: true,
+                        inputType,
+                        data,
+                    });
+                } catch (_) {
+                    event = new Event('input', { bubbles: true });
+                }
+                this._el.dispatchEvent(event);
+            } finally {
+                this._suppressSyntheticContentEditableInput = false;
+            }
         }
 
         _fireSelect(data) {
@@ -1311,11 +1369,15 @@
 
         _backspaceBeforeSpan(span, sel) {
             const prev = span.previousSibling;
+
             if (prev?.nodeType === Node.TEXT_NODE && prev.textContent.length > 0) {
                 prev.textContent = prev.textContent.slice(0, -1);
                 if (prev.textContent.length === 0) prev.remove();
                 setCaretBeforeNode(span);
-            } else if (this._isMentionSpan(prev)) {
+                return true;
+            }
+
+            if (this._isMentionSpan(prev)) {
                 prev.classList.add('active');
                 setCaretAt(prev.firstChild, prev.textContent.length);
                 this._mentionSpan = prev;
@@ -1324,10 +1386,16 @@
                     if (items === null) return;
                     if (this._inDOM(prev)) this._openDropdown(items);
                 });
-            } else if (prev) {
-                this._deleteEdgeCharacter(prev, true);
-                setCaretBeforeNode(span);
+                return false;
             }
+
+            if (prev) {
+                const changed = this._deleteEdgeCharacter(prev, true);
+                setCaretBeforeNode(span);
+                return changed;
+            }
+
+            return false;
         }
 
         // Forward delete at left edge of span — deletes the trigger character.
@@ -1344,23 +1412,26 @@
                 span.remove();
                 setCaretAt(tn, 0);
             }
+
+            return true;
         }
 
         // Delete the first character of the next sibling after a node.
         _deleteForwardAfterNode(node) {
             const next = node.nextSibling;
-            if (!next) return;
+            if (!next) return false;
 
             if (this._isMentionSpan(next)) {
                 next.remove();
-                return;
+                return true;
             }
 
-            this._deleteEdgeCharacter(next, false);
+            return this._deleteEdgeCharacter(next, false);
         }
 
         _insertBr(sel) {
-            if (!sel.rangeCount) return;
+            if (!sel.rangeCount) return false;
+
             const range = sel.getRangeAt(0);
             range.deleteContents();
             const br = document.createElement('br');
@@ -1369,6 +1440,7 @@
             range.collapse(true);
             sel.removeAllRanges();
             sel.addRange(range);
+            return true;
         }
 
         _findTokenAtCursor(text, position) {

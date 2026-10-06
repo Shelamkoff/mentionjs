@@ -949,3 +949,84 @@ describe('MentionJS second-pass regressions', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS contenteditable input events', () => {
+    it('emits one input event when the trigger is inserted manually', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const externalInput = vi.fn();
+        editor.addEventListener('input', externalInput);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(editor.textContent).toBe('@');
+        });
+
+        expect(externalInput).toHaveBeenCalledTimes(1);
+        mention.destroy();
+    });
+
+    it('emits input when a prevented backspace mutates mention content', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [],
+        });
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const externalInput = vi.fn();
+        editor.addEventListener('input', externalInput);
+
+        setCaret(span.firstChild, span.textContent.length);
+        const event = beforeInput(editor, 'deleteContentBackward');
+
+        await vi.waitFor(() => {
+            expect(span.textContent).toBe('@Alic');
+        });
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(externalInput).toHaveBeenCalledTimes(1);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('emits input when Enter inserts a line break after a committed mention', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const externalInput = vi.fn();
+        editor.addEventListener('input', externalInput);
+
+        setCaret(span.firstChild, span.textContent.length);
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.querySelector('br')).not.toBeNull();
+        expect(externalInput).toHaveBeenCalledTimes(1);
+
+        mention.destroy();
+    });
+});
