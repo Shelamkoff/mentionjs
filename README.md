@@ -86,7 +86,7 @@ const m = new MentionJS(element, options);
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `trigger` | `string` | `'@'` | Exactly one non-whitespace character that opens the dropdown |
+| `trigger` | `string` | `'@'` | Exactly one non-whitespace Unicode grapheme that opens the dropdown |
 | `searchFunction` | `SearchFunction` | `null` | Async search function (see below) |
 | `debounceDelay` | `number` | `300` | Debounce delay in ms for non-empty queries |
 | `noResultsText` | `string` | `'No results found'` | Text shown when search returns no items |

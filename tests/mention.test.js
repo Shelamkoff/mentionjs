@@ -1794,3 +1794,122 @@ describe('MentionJS composition, paste, and textarea selections', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS Unicode grapheme behavior', () => {
+    it('supports a single emoji grapheme as the trigger', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            trigger: '💬',
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '💬';
+        textarea.setSelectionRange('💬'.length, '💬'.length);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', null);
+        });
+
+        mention.destroy();
+    });
+
+    it('places the contenteditable caret after an emoji trigger without splitting the surrogate pair', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            trigger: '💬',
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        const event = beforeInput(editor, 'insertText', '💬');
+
+        expect(event.defaultPrevented).toBe(true);
+
+        const span = editor.querySelector('span.mention');
+        const selection = window.getSelection();
+        expect(span.textContent).toBe('💬');
+        expect(selection.anchorNode).toBe(span.firstChild);
+        expect(selection.anchorOffset).toBe('💬'.length);
+
+        mention.destroy();
+    });
+
+    it('backspaces a whole emoji grapheme inside an edited mention', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [],
+        });
+        mention.push({ id: 1, name: 'A😊' });
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, span.textContent.length);
+        beforeInput(editor, 'deleteContentBackward');
+
+        expect(span.textContent).toBe('@A');
+        expect(span.textContent.includes('\uFFFD')).toBe(false);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('forward-deletes a whole emoji grapheme inside an edited mention', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [],
+        });
+        mention.push({ id: 1, name: 'A😊B' });
+
+        const span = editor.querySelector('span.mention');
+        const emojiStart = '@A'.length;
+        setCaret(span.firstChild, emojiStart);
+        beforeInput(editor, 'deleteContentForward');
+
+        expect(span.textContent).toBe('@AB');
+        expect(span.textContent.includes('\uFFFD')).toBe(false);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('removes a whole emoji trigger when backspacing over it', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            trigger: '💬',
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '💬');
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, '💬'.length);
+        beforeInput(editor, 'deleteContentBackward');
+
+        expect(editor.textContent).toBe('');
+        expect(editor.querySelector('span.mention')).toBeNull();
+
+        mention.destroy();
+    });
+});

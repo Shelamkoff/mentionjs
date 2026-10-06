@@ -86,7 +86,7 @@ const m = new MentionJS(element, options);
 
 | Опция | Тип | По умолчанию | Описание |
 |-------|-----|-------------|----------|
-| `trigger` | `string` | `'@'` | Ровно один непробельный символ, открывающий дропдаун |
+| `trigger` | `string` | `'@'` | Ровно одна непробельная Unicode-графема, открывающая дропдаун |
 | `searchFunction` | `SearchFunction` | `null` | Асинхронная функция поиска (см. ниже) |
 | `debounceDelay` | `number` | `300` | Задержка debounce в мс для непустых запросов |
 | `noResultsText` | `string` | `'No results found'` | Текст при пустом результате поиска |

@@ -30,6 +30,66 @@
     let instanceCounter = 0;
     const SEARCH_CANCELLED = Symbol('MentionJS search cancelled');
     const SEARCH_FAILED = Symbol('MentionJS search failed');
+    const graphemeSegmenter = typeof Intl?.Segmenter === 'function'
+        ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+        : null;
+
+    function graphemeSegments(str) {
+        if (graphemeSegmenter) {
+            return Array.from(graphemeSegmenter.segment(str), ({ segment, index }) => ({
+                segment,
+                start: index,
+                end: index + segment.length,
+            }));
+        }
+
+        const segments = [];
+        let index = 0;
+        for (const segment of Array.from(str)) {
+            segments.push({ segment, start: index, end: index + segment.length });
+            index += segment.length;
+        }
+        return segments;
+    }
+
+    function countGraphemes(str) {
+        return graphemeSegments(str).length;
+    }
+
+    function removeGraphemeBefore(str, offset) {
+        if (offset <= 0) return { text: str, offset };
+
+        const segments = graphemeSegments(str);
+        let target = null;
+        for (const segment of segments) {
+            if (segment.start < offset && segment.end >= offset) {
+                target = segment;
+                break;
+            }
+            if (segment.end <= offset) target = segment;
+        }
+
+        if (!target) return { text: str, offset };
+
+        return {
+            text: str.substring(0, target.start) + str.substring(target.end),
+            offset: target.start,
+        };
+    }
+
+    function removeGraphemeAt(str, offset) {
+        if (offset >= str.length) return { text: str, offset };
+
+        const target = graphemeSegments(str).find(
+            (segment) => segment.start <= offset && segment.end > offset
+        );
+        if (!target) return { text: str, offset };
+
+        return {
+            text: str.substring(0, target.start) + str.substring(target.end),
+            offset: target.start,
+        };
+    }
 
     function createElement(tag, className) {
         const el = document.createElement(tag);
@@ -566,10 +626,10 @@
 
             if (
                 typeof this._opts.trigger !== 'string' ||
-                this._opts.trigger.length !== 1 ||
-                /\s/.test(this._opts.trigger)
+                countGraphemes(this._opts.trigger) !== 1 ||
+                /\s/u.test(this._opts.trigger)
             ) {
-                throw new Error('MentionJS: trigger must be exactly one non-whitespace character');
+                throw new Error('MentionJS: trigger must be exactly one non-whitespace grapheme');
             }
 
             if (
@@ -1060,7 +1120,7 @@
             if (e.inputType === 'deleteContentBackward') {
                 const offset = cursorInText ?? spanText.length;
 
-                if (spanText.length === 1) {
+                if (spanText === this._opts.trigger) {
                     e.preventDefault();
                     this._closeDropdown();
                     const prev = span.previousSibling;
@@ -1080,9 +1140,11 @@
                 }
 
                 // Backspace over the trigger char → unwrap to plain text.
-                if (offset === 1 && spanText.startsWith(this._opts.trigger)) {
+                if (offset === this._opts.trigger.length && spanText.startsWith(this._opts.trigger)) {
                     e.preventDefault();
-                    const tn = document.createTextNode(spanText.substring(1));
+                    const tn = document.createTextNode(
+                        spanText.substring(this._opts.trigger.length)
+                    );
                     span.parentNode.insertBefore(tn, span);
                     span.remove();
                     this._closeDropdown();
@@ -1094,8 +1156,9 @@
                 e.preventDefault();
                 this._invalidateMentionMetadata(span);
 
-                const newText = removeCharAt(spanText, offset - 1);
-                const newOffset = offset - 1;
+                const removal = removeGraphemeBefore(spanText, offset);
+                const newText = removal.text;
+                const newOffset = removal.offset;
                 const tn = span.firstChild;
 
                 if (tn?.nodeType === Node.TEXT_NODE) {
@@ -1134,7 +1197,9 @@
                 e.preventDefault();
                 this._invalidateMentionMetadata(span);
 
-                const newText = removeCharAt(spanText, offset);
+                const removal = removeGraphemeAt(spanText, offset);
+                const newText = removal.text;
+                const newOffset = removal.offset;
 
                 if (newText.length === 0) {
                     const prev = span.previousSibling;
@@ -1155,7 +1220,10 @@
                 }
 
                 // Deleted the trigger character → unwrap to plain text.
-                if (offset === 0 && !newText.startsWith(this._opts.trigger)) {
+                if (
+                    offset < this._opts.trigger.length &&
+                    !newText.startsWith(this._opts.trigger)
+                ) {
                     const tn = document.createTextNode(newText);
                     span.parentNode.insertBefore(tn, span);
                     span.remove();
@@ -1171,7 +1239,7 @@
                 } else {
                     span.textContent = newText;
                 }
-                setCaretAt(span.firstChild, offset);
+                setCaretAt(span.firstChild, newOffset);
                 this._dispatchContentEditableInput(e.inputType);
 
                 if (!isActive) span.classList.add('active');
@@ -1544,7 +1612,7 @@
             span.appendChild(document.createTextNode(this._opts.trigger));
             range.insertNode(span);
 
-            setCaretAt(span.firstChild, 1);
+            setCaretAt(span.firstChild, this._opts.trigger.length);
             return span;
         }
 
@@ -1585,13 +1653,13 @@
 
         // Forward delete at left edge of span — deletes the trigger character.
         _deleteForwardInSpan(span, spanText) {
-            if (spanText.length <= 1) {
+            if (spanText === this._opts.trigger) {
                 const next = span.nextSibling;
                 span.remove();
                 if (next) setCaretBeforeNode(next);
                 else setCaretAt(this._el, this._el.childNodes.length);
             } else {
-                const remaining = spanText.substring(1);
+                const remaining = spanText.substring(this._opts.trigger.length);
                 const tn = document.createTextNode(remaining);
                 span.parentNode.insertBefore(tn, span);
                 span.remove();
