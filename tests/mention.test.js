@@ -323,3 +323,82 @@ describe('MentionJS interaction consistency', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS caret lifecycle', () => {
+    it('closes textarea search when the caret leaves the active trigger token', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.value = '@a';
+        textarea.focus();
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.setSelectionRange(0, 0);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('updates textarea search when the caret moves within the active token', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.value = '@abc';
+        textarea.focus();
+        textarea.setSelectionRange(4, 4);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('abc', null);
+        });
+
+        textarea.setSelectionRange(2, 2);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('a', null);
+        });
+
+        mention.destroy();
+    });
+
+    it('closes contenteditable search when selection leaves the active mention span', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        const outsideText = document.createTextNode('outside');
+        editor.appendChild(outsideText);
+        setCaret(outsideText, outsideText.textContent.length);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+});

@@ -485,14 +485,61 @@
 
         _bindScrollResize() {
             this._h.reposition = () => this._repositionDropdown();
-            document.addEventListener('scroll', this._h.reposition, { passive: true });
+            document.addEventListener('scroll', this._h.reposition, { passive: true, capture: true });
             window.addEventListener('resize', this._h.reposition, { passive: true });
         }
 
         _unbindScrollResize() {
             if (this._h.reposition) {
-                document.removeEventListener('scroll', this._h.reposition);
+                document.removeEventListener('scroll', this._h.reposition, true);
                 window.removeEventListener('resize', this._h.reposition);
+            }
+        }
+
+        _bindSelectionChange() {
+            this._h.selectionChange = () => this._onSelectionChange();
+            document.addEventListener('selectionchange', this._h.selectionChange);
+        }
+
+        _unbindSelectionChange() {
+            if (this._h.selectionChange) {
+                document.removeEventListener('selectionchange', this._h.selectionChange);
+            }
+        }
+
+        _onSelectionChange() {
+            if (!this._ui.el) return;
+
+            if (this._isTextarea) {
+                if (document.activeElement !== this._el) {
+                    this._closeDropdown();
+                    return;
+                }
+
+                const token = this._findTokenAtCursor(this._el.value, this._el.selectionStart);
+                if (!token) {
+                    this._closeDropdown();
+                    return;
+                }
+
+                if (
+                    token.start !== this._mentionStart ||
+                    token.end !== this._mentionEnd ||
+                    token.query !== this._currentQuery
+                ) {
+                    this._mentionStart = token.start;
+                    this._mentionEnd = token.end;
+                    this._search(token.query).then((items) => {
+                        if (items === null) return;
+                        if (document.activeElement === this._el) this._openDropdown(items);
+                    });
+                }
+                return;
+            }
+
+            const span = this._getMentionSpan(window.getSelection());
+            if (!span || span !== this._mentionSpan) {
+                this._closeDropdown();
             }
         }
 
@@ -1231,6 +1278,7 @@
                 this._ui.mount(this._isTextarea ? 'textarea' : 'contenteditable');
                 this._bindDropdownEvents();
                 this._bindScrollResize();
+                this._bindSelectionChange();
             }
 
             this._ui.hide();
@@ -1248,6 +1296,7 @@
 
             this._unbindDropdownEvents();
             this._unbindScrollResize();
+            this._unbindSelectionChange();
             this._ui.destroy();
 
             if (this._mentionSpan) {
