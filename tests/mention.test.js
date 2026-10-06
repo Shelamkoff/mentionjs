@@ -2335,3 +2335,91 @@ describe('MentionJS instance and cancelled-token cleanup', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS stale selectable results during debounce', () => {
+    it('does not commit an old textarea result after the query changes', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const searchFunction = vi.fn((query) => (
+            query === 'a'
+                ? Promise.resolve([{ id: 1, name: 'Alice' }])
+                : Promise.resolve([{ id: 2, name: 'Abel' }])
+        ));
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 50,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('Alice');
+        });
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('@ab');
+        expect(mention.getMentions()).toEqual([]);
+        expect(searchFunction).not.toHaveBeenCalledWith('ab', null);
+
+        mention.destroy();
+    });
+
+    it('does not commit an old contenteditable result after its token changes', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn((query) => (
+            query === 'a'
+                ? Promise.resolve([{ id: 1, name: 'Alice' }])
+                : Promise.resolve([{ id: 2, name: 'Abel' }])
+        ));
+        const mention = new MentionJS(editor, {
+            debounceDelay: 50,
+            searchFunction,
+        });
+
+        editor.innerHTML = '<span class="mention" data-mentionjs-token="true">@a</span>';
+        const span = editor.firstChild;
+        span.classList.add('active');
+        mention._mentionSpan = span;
+
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('Alice');
+        });
+
+        span.firstChild.textContent = '@ab';
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.textContent).toContain('@ab');
+        expect(mention.getMentions()).toEqual([]);
+        expect(searchFunction).not.toHaveBeenCalledWith('ab', null);
+
+        mention.destroy();
+    });
+});

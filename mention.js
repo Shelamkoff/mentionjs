@@ -403,6 +403,7 @@
             if (!nextPageUrl) {
                 this._currentQuery = query;
                 this._cancelDebounce();
+                this._items = [];
                 this._nextPageUrl = null;
                 this._invalidateLoadingMore();
             }
