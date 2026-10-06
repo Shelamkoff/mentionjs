@@ -389,9 +389,9 @@
         }
 
         finishLoadingMore(generation) {
-            if (generation === this._loadingMoreGeneration) {
-                this._isLoadingMore = false;
-            }
+            if (generation !== this._loadingMoreGeneration) return false;
+            this._isLoadingMore = false;
+            return true;
         }
 
         _invalidateLoadingMore() {
@@ -1920,7 +1920,13 @@
         }
 
         async _search(query, nextPageUrl = null) {
-            if (!nextPageUrl) this._bindSelectionChange();
+            if (!nextPageUrl) {
+                this._bindSelectionChange();
+                if (this._ui.el) {
+                    this._ui.hide();
+                    this._setExpanded(false);
+                }
+            }
             return await this._searchSession.search(query, nextPageUrl);
         }
 
@@ -1951,14 +1957,14 @@
                     this._searchSession.currentQuery,
                     this._searchSession.nextPageUrl
                 );
-                this._ui.hideLoading();
                 if (newItems === null || newItems === SEARCH_FAILED) return;
                 this._ui.appendItems(newItems, prevLen, this._selectedIndex);
             } catch (err) {
                 console.warn('MentionJS: load more failed', err);
-                this._ui.hideLoading();
             } finally {
-                this._searchSession.finishLoadingMore(loadingGeneration);
+                if (this._searchSession.finishLoadingMore(loadingGeneration)) {
+                    this._ui.hideLoading();
+                }
             }
         }
 

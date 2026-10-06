@@ -2651,3 +2651,133 @@ describe('MentionJS push during active search', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS stale async UI isolation', () => {
+    it('hides old textarea results immediately when a new debounced query starts', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const searchFunction = vi.fn((query) => (
+            query === 'a'
+                ? Promise.resolve([{ id: 1, name: 'Alice' }])
+                : Promise.resolve([{ id: 2, name: 'Abel' }])
+        ));
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 100,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        expect(document.querySelector('.mention-dropdown.active')).toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+
+        mention.destroy();
+    });
+
+    it('does not let stale pagination hide the loading state of a newer page request', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveOldPage;
+        let resolveNewPage;
+        const oldPage = new Promise((resolve) => { resolveOldPage = resolve; });
+        const newPage = new Promise((resolve) => { resolveNewPage = resolve; });
+
+        const searchFunction = vi.fn((query, nextPageUrl) => {
+            if (nextPageUrl === '/old') return oldPage;
+            if (nextPageUrl === '/new') return newPage;
+            if (query === 'n') {
+                return Promise.resolve({
+                    items: [
+                        { id: 3, name: 'New One' },
+                        { id: 4, name: 'New Two' },
+                    ],
+                    nextPageUrl: '/new',
+                });
+            }
+            return Promise.resolve({
+                items: [
+                    { id: 1, name: 'Old One' },
+                    { id: 2, name: 'Old Two' },
+                ],
+                nextPageUrl: '/old',
+            });
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]')).toHaveLength(2);
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', '/old');
+        });
+
+        textarea.value = '@n';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('New One');
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('n', '/new');
+            expect(document.querySelector('.mention-loading')).not.toBeNull();
+        });
+
+        resolveOldPage({
+            items: [{ id: 5, name: 'Old Three' }],
+            nextPageUrl: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-loading')).not.toBeNull();
+
+        resolveNewPage({
+            items: [{ id: 6, name: 'New Three' }],
+            nextPageUrl: null,
+        });
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-loading')).toBeNull();
+        });
+
+        mention.destroy();
+    });
+});
