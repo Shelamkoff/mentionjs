@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "build": "terser mention.js --compress --mangle --comments false --output dist/mention.min.js && cleancss -o dist/mention.min.css mention.css && node -e \"require('node:fs').copyFileSync('mention.d.ts','dist/mention.d.ts')\"",
+    "build": "terser mention.js --compress --mangle --comments false --output dist/mention.min.js && lightningcss --minify mention.css -o dist/mention.min.css && node -e \"require('node:fs').copyFileSync('mention.d.ts','dist/mention.d.ts')\"",
     "check": "npm test && npm run build"
   },
   "keywords": [
@@ -35,9 +35,9 @@
     "url": "https://github.com/shelamkoff/mentionjs/issues"
   },
   "devDependencies": {
-    "clean-css-cli": "^5.6.3",
-    "terser": "^5.46.0",
-    "jsdom": "^26.1.0",
-    "vitest": "^3.2.4"
+    "jsdom": "^30.1.1",
+    "lightningcss-cli": "^1.33.0",
+    "terser": "^5.51.2",
+    "vitest": "^5.0.3"
   }
 }
