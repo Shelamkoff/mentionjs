@@ -1990,6 +1990,19 @@
          * @param {{ id: any, name: string }} mentionData
          */
         push(mentionData) {
+            if (
+                !mentionData ||
+                typeof mentionData !== 'object' ||
+                (typeof mentionData.id !== 'string' && typeof mentionData.id !== 'number') ||
+                typeof mentionData.name !== 'string'
+            ) {
+                throw new Error('MentionJS: push() requires { id: string|number, name: string }');
+            }
+
+            if (this._ui.el || this._mentionStart !== null || this._mentionSpan) {
+                this._closeDropdown();
+            }
+
             if (this._isTextarea) {
                 const text = this._el.value;
                 const mentionText = this._opts.trigger + mentionData.name;

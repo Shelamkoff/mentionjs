@@ -2565,3 +2565,89 @@ describe('MentionJS composition lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS push during active search', () => {
+    it('cancels textarea search before programmatic insertion', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.value).toBe('@a@Bob ');
+        expect(mention.getMentions()).toEqual([
+            { id: 2, name: 'Bob', start: 2, end: 6 },
+        ]);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('@a@Bob ');
+        expect(mention.getMentions()).toEqual([
+            { id: 2, name: 'Bob', start: 2, end: 6 },
+        ]);
+
+        mention.destroy();
+    });
+
+    it('does not nest a pushed contenteditable mention inside an active token', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        const active = editor.querySelector('span.mention.active');
+        setCaret(active.firstChild, active.textContent.length);
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(editor.querySelector('span.mention span.mention')).toBeNull();
+
+        const mentions = editor.querySelectorAll('span.mention');
+        expect(mentions).toHaveLength(1);
+        expect(mentions[0].dataset.mentionId).toBe('2');
+        expect(mention.getMentions()).toEqual([{ id: '2', name: 'Bob' }]);
+
+        mention.destroy();
+    });
+
+    it('validates push() data at runtime', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+
+        expect(() => mention.push(null)).toThrow(/push/);
+        expect(() => mention.push({ id: 1 })).toThrow(/push/);
+        expect(() => mention.push({ id: {}, name: 'Alice' })).toThrow(/push/);
+
+        mention.destroy();
+    });
+});
