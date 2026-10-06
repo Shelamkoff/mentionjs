@@ -27,6 +27,8 @@
         renderLoading: null,
     };
 
+    let instanceCounter = 0;
+
     function createElement(tag, className) {
         const el = document.createElement(tag);
         if (className) el.className = className;
@@ -71,8 +73,9 @@
     }
 
     class DropdownUI {
-        constructor(options) {
+        constructor(options, id) {
             this._options = options;
+            this._id = id;
             this._el = null;
         }
 
@@ -88,6 +91,8 @@
                 ['mention-dropdown', this._options.dropdownClass].filter(Boolean).join(' ')
             );
             this._el.dataset.mentionType = type;
+            this._el.id = this._id;
+            this._el.setAttribute('role', 'listbox');
             document.body.appendChild(this._el);
             return this._el;
         }
@@ -120,12 +125,18 @@
                     if (!custom.classList.contains('mention-item')) custom.classList.add('mention-item');
                     if (index === selectedIndex) custom.classList.add('mention-active');
                     custom.dataset.index = index;
+                    custom.id = this.getOptionId(index);
+                    custom.setAttribute('role', 'option');
+                    custom.setAttribute('aria-selected', index === selectedIndex ? 'true' : 'false');
                     return custom;
                 }
             }
 
             const el = createElement('div', 'mention-item' + (index === selectedIndex ? ' mention-active' : ''));
             el.dataset.index = index;
+            el.id = this.getOptionId(index);
+            el.setAttribute('role', 'option');
+            el.setAttribute('aria-selected', index === selectedIndex ? 'true' : 'false');
 
             if (data.avatar) {
                 const img = document.createElement('img');
@@ -157,10 +168,16 @@
         _buildNoResults() {
             if (this._options.renderNoResults) {
                 const custom = this._options.renderNoResults(this._options.noResultsText);
-                if (custom instanceof HTMLElement) return custom;
+                if (custom instanceof HTMLElement) {
+                    if (!custom.hasAttribute('role')) custom.setAttribute('role', 'status');
+                    custom.setAttribute('aria-live', 'polite');
+                    return custom;
+                }
             }
 
             const el = createElement('div', 'mention-item mention-no-results');
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
             el.innerHTML = `
                 <div class="mention-avatar-placeholder">?</div>
                 <div class="mention-info">
@@ -170,10 +187,16 @@
             return el;
         }
 
+        getOptionId(index) {
+            return this._id + '-option-' + index;
+        }
+
         updateSelection(selectedIndex) {
             if (!this._el) return;
             this._el.querySelectorAll('.mention-item[data-index]').forEach((item) => {
-                item.classList.toggle('mention-active', parseInt(item.dataset.index) === selectedIndex);
+                const isSelected = parseInt(item.dataset.index) === selectedIndex;
+                item.classList.toggle('mention-active', isSelected);
+                item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             });
         }
 
@@ -190,12 +213,16 @@
                 const custom = this._options.renderLoading();
                 if (custom instanceof HTMLElement) {
                     if (!custom.classList.contains('mention-loading')) custom.classList.add('mention-loading');
+                    if (!custom.hasAttribute('role')) custom.setAttribute('role', 'status');
+                    custom.setAttribute('aria-live', 'polite');
                     this._el.appendChild(custom);
                     return;
                 }
             }
 
             const loader = createElement('div', 'mention-loading');
+            loader.setAttribute('role', 'status');
+            loader.setAttribute('aria-live', 'polite');
             loader.innerHTML = `
                 <div class="mention-item">
                     <div class="mention-avatar-placeholder">⏳</div>
@@ -235,9 +262,15 @@
             const vh = window.innerHeight;
             let newLeft = left;
             let newTop = top;
+            let horizontalOffset = 0;
 
-            if (rect.right > vw - 10) newLeft = Math.max(10, left - (rect.right - vw + 10));
-            if (rect.left < 10) newLeft = 10;
+            if (rect.right > vw - 10) {
+                horizontalOffset -= rect.right - (vw - 10);
+            }
+            if (rect.left + horizontalOffset < 10) {
+                horizontalOffset += 10 - (rect.left + horizontalOffset);
+            }
+            newLeft += horizontalOffset;
 
             if (rect.bottom > vh - 10 && cursorY > vh / 2) {
                 newTop = top - this._el.offsetHeight - lineHeight;
@@ -281,8 +314,10 @@
             this._opts = Object.assign({}, DEFAULTS, options);
             this._el = element;
             this._isTextarea = isTextarea;
+            this._instanceId = ++instanceCounter;
+            this._dropdownId = 'mentionjs-dropdown-' + this._instanceId;
 
-            this._ui = new DropdownUI(this._opts);
+            this._ui = new DropdownUI(this._opts, this._dropdownId);
 
             this._selectedIndex = 0;
             this._searchResults = [];
@@ -303,9 +338,56 @@
             this._textareaEdit = null;
 
             this._h = {};
+            this._a11yOriginal = {};
 
+            this._configureAccessibility();
             this._bindElementEvents();
             this._bindDocumentClick();
+        }
+
+        _configureAccessibility() {
+            const attributes = [
+                'role',
+                'aria-autocomplete',
+                'aria-haspopup',
+                'aria-controls',
+                'aria-expanded',
+                'aria-activedescendant',
+            ];
+
+            attributes.forEach((name) => {
+                this._a11yOriginal[name] = this._el.getAttribute(name);
+            });
+
+            if (!this._el.hasAttribute('role')) this._el.setAttribute('role', 'combobox');
+            this._el.setAttribute('aria-autocomplete', 'list');
+            this._el.setAttribute('aria-haspopup', 'listbox');
+            this._el.setAttribute('aria-controls', this._dropdownId);
+            this._el.setAttribute('aria-expanded', 'false');
+        }
+
+        _restoreAccessibility() {
+            Object.entries(this._a11yOriginal).forEach(([name, value]) => {
+                if (value === null) this._el.removeAttribute(name);
+                else this._el.setAttribute(name, value);
+            });
+        }
+
+        _setExpanded(expanded) {
+            this._el.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            if (!expanded) this._el.removeAttribute('aria-activedescendant');
+        }
+
+        _syncActiveDescendant() {
+            if (!this._ui.el || !this._searchResults[this._selectedIndex]) {
+                this._el.removeAttribute('aria-activedescendant');
+                return;
+            }
+
+            this._el.setAttribute(
+                'aria-activedescendant',
+                this._ui.getOptionId(this._selectedIndex)
+            );
         }
 
         _bindElementEvents() {
@@ -370,15 +452,32 @@
             };
             this._h.ddScroll = () => this._onDropdownScroll();
             this._h.ddMousedown = (e) => e.preventDefault();
+            this._h.ddMousemove = (e) => {
+                const item = e.target.closest('.mention-item[data-index]');
+                if (!item) return;
+
+                const index = parseInt(item.dataset.index);
+                if (!Number.isInteger(index) || index === this._selectedIndex) return;
+
+                this._selectedIndex = index;
+                this._ui.updateSelection(index);
+                this._syncActiveDescendant();
+            };
 
             this._ui.el.addEventListener('click', this._h.ddClick);
             this._ui.el.addEventListener('scroll', this._h.ddScroll);
             this._ui.el.addEventListener('mousedown', this._h.ddMousedown);
+            this._ui.el.addEventListener('mousemove', this._h.ddMousemove);
         }
 
         _unbindDropdownEvents() {
             if (!this._ui.el) return;
-            const EVENT_MAP = { ddClick: 'click', ddScroll: 'scroll', ddMousedown: 'mousedown' };
+            const EVENT_MAP = {
+                ddClick: 'click',
+                ddScroll: 'scroll',
+                ddMousedown: 'mousedown',
+                ddMousemove: 'mousemove',
+            };
             Object.entries(EVENT_MAP).forEach(([key, eventName]) => {
                 if (this._h[key]) this._ui.el.removeEventListener(eventName, this._h[key]);
             });
@@ -762,6 +861,7 @@
                     e.preventDefault();
                     this._selectedIndex = Math.min(this._selectedIndex + 1, max);
                     this._ui.updateSelection(this._selectedIndex);
+                    this._syncActiveDescendant();
                     this._ui.scrollToActive();
                     this._maybeLoadMore();
                     break;
@@ -769,6 +869,7 @@
                     e.preventDefault();
                     this._selectedIndex = Math.max(this._selectedIndex - 1, 0);
                     this._ui.updateSelection(this._selectedIndex);
+                    this._syncActiveDescendant();
                     this._ui.scrollToActive();
                     break;
                 case 'Enter':
@@ -842,6 +943,7 @@
 
             span.textContent = this._opts.trigger + data.name;
             span.classList.remove('active');
+            span.dataset.mentionjsToken = 'true';
             span.dataset.mentionId = String(data.id);
             span.dataset.mentionName = data.name;
             span.removeAttribute('id');
@@ -858,6 +960,7 @@
             }
 
             this._closeDropdown();
+            this._el.dispatchEvent(new Event('input', { bubbles: true }));
             this._fireSelect(data);
         }
 
@@ -871,6 +974,12 @@
         // ContentEditable utilities
         // ─────────────────────────────────────────────
 
+        _isMentionSpan(span) {
+            if (!(span instanceof HTMLElement) || !span.matches('span.mention')) return false;
+            return span.dataset.mentionjsToken === 'true' ||
+                (span.hasAttribute('data-mention-id') && span.hasAttribute('data-mention-name'));
+        }
+
         _getMentionSpan(sel) {
             if (!sel) return null;
             const node = sel.anchorNode;
@@ -879,7 +988,7 @@
             const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
             const span = element?.closest?.('span.mention') ?? null;
 
-            return span && this._el.contains(span) ? span : null;
+            return span && this._el.contains(span) && this._isMentionSpan(span) ? span : null;
         }
 
         _invalidateMentionMetadata(span) {
@@ -977,7 +1086,8 @@
             range.deleteContents();
 
             const span = createElement('span', 'mention active');
-            span.id = 'mjs-' + (++this._mentionCounter);
+            span.dataset.mentionjsToken = 'true';
+            span.id = 'mjs-' + this._instanceId + '-' + (++this._mentionCounter);
             span.appendChild(document.createTextNode(this._opts.trigger));
             range.insertNode(span);
 
@@ -991,7 +1101,7 @@
                 prev.textContent = prev.textContent.slice(0, -1);
                 if (prev.textContent.length === 0) prev.remove();
                 setCaretBeforeNode(span);
-            } else if (prev?.classList?.contains('mention')) {
+            } else if (this._isMentionSpan(prev)) {
                 prev.classList.add('active');
                 setCaretAt(prev.firstChild, prev.textContent.length);
                 this._mentionSpan = prev;
@@ -1027,7 +1137,7 @@
             const next = node.nextSibling;
             if (!next) return;
 
-            if (next.classList?.contains('mention')) {
+            if (this._isMentionSpan(next)) {
                 next.remove();
                 return;
             }
@@ -1126,11 +1236,15 @@
             this._ui.hide();
             this._selectedIndex = 0;
             this._ui.render(items, 0);
+            this._setExpanded(true);
+            this._syncActiveDescendant();
             this._repositionDropdown();
         }
 
         _closeDropdown() {
             this._searchRequestId++;
+            this._skipNextContentEditableInput = false;
+            this._setExpanded(false);
 
             this._unbindDropdownEvents();
             this._unbindScrollResize();
@@ -1183,7 +1297,7 @@
                     'lineHeight', 'letterSpacing', 'wordSpacing', 'textTransform',
                     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
                     'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-                    'boxSizing',
+                    'boxSizing', 'direction', 'textAlign', 'tabSize', 'overflowWrap', 'wordBreak',
                 ];
                 copyProps.forEach((p) => { mirror.style[p] = cs[p]; });
                 mirror.style.position = 'absolute';
@@ -1207,7 +1321,7 @@
                 document.body.removeChild(mirror);
 
                 const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4;
-                const relX = markerRect.left - mirrorRect.left;
+                const relX = markerRect.left - mirrorRect.left - el.scrollLeft;
                 const relY = markerRect.top - mirrorRect.top - el.scrollTop;
 
                 this._ui.positionRaw({
@@ -1390,6 +1504,7 @@
                 }
 
                 const span = createElement('span', 'mention');
+                span.dataset.mentionjsToken = 'true';
                 span.dataset.mentionId = String(mentionData.id);
                 span.dataset.mentionName = mentionData.name;
                 span.textContent = this._opts.trigger + mentionData.name;
@@ -1431,6 +1546,7 @@
             this._closeDropdown();
             this._unbindElementEvents();
             this._unbindDocumentClick();
+            this._restoreAccessibility();
         }
 
         static create(element, options) {

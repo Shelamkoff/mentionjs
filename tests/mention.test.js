@@ -195,3 +195,131 @@ describe('MentionJS behavior invariants', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS interaction consistency', () => {
+    it('keeps ARIA combobox state synchronized with dropdown selection', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [
+                { id: 1, name: 'Alice' },
+                { id: 2, name: 'Bob' },
+            ],
+        });
+
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(textarea.getAttribute('aria-expanded')).toBe('true');
+        });
+
+        const dropdown = document.querySelector('.mention-dropdown');
+        const options = dropdown.querySelectorAll('.mention-item[data-index]');
+
+        expect(textarea.getAttribute('role')).toBe('combobox');
+        expect(dropdown.getAttribute('role')).toBe('listbox');
+        expect(options[0].getAttribute('role')).toBe('option');
+        expect(options[0].getAttribute('aria-selected')).toBe('true');
+        expect(textarea.getAttribute('aria-activedescendant')).toBe(options[0].id);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(options[0].getAttribute('aria-selected')).toBe('false');
+        expect(options[1].getAttribute('aria-selected')).toBe('true');
+        expect(textarea.getAttribute('aria-activedescendant')).toBe(options[1].id);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+        expect(textarea.hasAttribute('aria-activedescendant')).toBe(false);
+        mention.destroy();
+    });
+
+    it('uses the hovered dropdown item for the next keyboard commit', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [
+                { id: 1, name: 'Alice' },
+                { id: 2, name: 'Bob' },
+            ],
+        });
+
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]').length).toBe(2);
+        });
+
+        const second = document.querySelector('.mention-item[data-index="1"]');
+        second.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('@Bob ');
+        expect(mention.getMentions()).toEqual([
+            { id: 2, name: 'Bob', start: 0, end: 4 },
+        ]);
+        mention.destroy();
+    });
+
+    it('dispatches input after committing a contenteditable mention', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+        const externalInput = vi.fn();
+        editor.addEventListener('input', externalInput);
+
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(externalInput).toHaveBeenCalledTimes(1);
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+        mention.destroy();
+    });
+
+    it('ignores unrelated elements that only reuse the mention CSS class', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention">ordinary styled text</span>';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+
+        const foreign = editor.querySelector('.mention');
+        setCaret(foreign.firstChild, 1);
+        beforeInput(editor, 'deleteContentBackward');
+
+        expect(foreign.textContent).toBe('ordinary styled text');
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+});
