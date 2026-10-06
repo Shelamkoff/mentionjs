@@ -784,6 +784,11 @@
             if (!this._ui.el) return;
 
             if (this._isTextarea) {
+                if (this._el.selectionStart !== this._el.selectionEnd) {
+                    this._closeDropdown();
+                    return;
+                }
+
                 const token = this._findTokenAtCursor(this._el.value, this._el.selectionStart);
                 if (!token) {
                     this._closeDropdown();
@@ -829,7 +834,8 @@
             this._textareaMentions.reconcile(this._el.value);
 
             const pos = this._el.selectionStart;
-            const token = this._findTokenAtCursor(this._el.value, pos);
+            const hasSelection = this._el.selectionStart !== this._el.selectionEnd;
+            const token = hasSelection ? null : this._findTokenAtCursor(this._el.value, pos);
 
             if (token) {
                 this._mentionStart = token.start;
@@ -855,7 +861,10 @@
 
             if ((e.key === 'Backspace' || e.key === 'Delete') && this._ui.el) {
                 setTimeout(() => {
-                    const token = this._findTokenAtCursor(this._el.value, this._el.selectionStart);
+                    const hasSelection = this._el.selectionStart !== this._el.selectionEnd;
+                    const token = hasSelection
+                        ? null
+                        : this._findTokenAtCursor(this._el.value, this._el.selectionStart);
                     if (!token) this._closeDropdown();
                 }, 0);
             }
@@ -968,28 +977,50 @@
             }
 
             if (isAtStart) {
-                e.preventDefault();
                 this._closeDropdown();
 
-                if (e.inputType === 'insertText' && e.data) {
+                const manuallyInsertedText =
+                    ['insertText', 'insertCompositionText', 'insertReplacementText']
+                        .includes(e.inputType) &&
+                    typeof e.data === 'string' &&
+                    e.data.length > 0;
+
+                if (manuallyInsertedText) {
+                    e.preventDefault();
                     const tn = document.createTextNode(e.data);
                     span.parentNode.insertBefore(tn, span);
                     setCaretAt(tn, e.data.length);
                     this._dispatchContentEditableInput(e.inputType, e.data);
-                } else if (e.inputType === 'deleteContentBackward') {
+                    return;
+                }
+
+                if (e.inputType === 'deleteContentBackward') {
+                    e.preventDefault();
                     if (this._backspaceBeforeSpan(span, sel)) {
                         this._dispatchContentEditableInput(e.inputType);
                     }
-                } else if (e.inputType === 'deleteContentForward') {
+                    return;
+                }
+
+                if (e.inputType === 'deleteContentForward') {
+                    e.preventDefault();
                     if (this._deleteForwardInSpan(span, spanText)) {
                         this._dispatchContentEditableInput(e.inputType);
                     }
+                    return;
                 }
+
+                // Paste/drop and other browser-managed edits must not be swallowed.
+                // Native input will reconcile the resulting DOM.
                 return;
             }
 
             if (isAtEnd && !isActive) {
-                if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
+                if (
+                    ['insertText', 'insertCompositionText', 'insertReplacementText'].includes(e.inputType) &&
+                    typeof e.data === 'string' &&
+                    e.data.length > 0
+                ) {
                     e.preventDefault();
                     const next = span.nextSibling;
                     if (next?.nodeType === Node.TEXT_NODE) {
@@ -999,7 +1030,7 @@
                         const char = e.data === ' ' ? '\u00A0' : e.data;
                         const tn = document.createTextNode(char);
                         span.after(tn);
-                        setCaretAt(tn, 1);
+                        setCaretAt(tn, char.length);
                     }
                     this._dispatchContentEditableInput(e.inputType, e.data);
                     return;

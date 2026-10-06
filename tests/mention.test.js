@@ -1678,3 +1678,119 @@ describe('MentionJS separator and stylesheet isolation', () => {
         expect(sheetText).toContain('span.mention[data-mentionjs-token="true"]');
     });
 });
+
+
+describe('MentionJS composition, paste, and textarea selections', () => {
+    it('does not search from a textarea while a non-collapsed selection is active', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@alice';
+        textarea.setSelectionRange(2, 5);
+        input(textarea);
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(searchFunction).not.toHaveBeenCalled();
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+
+        mention.destroy();
+    });
+
+    it('closes an open textarea search when text becomes selected', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@ali';
+        textarea.setSelectionRange(4, 4);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.setSelectionRange(1, 3);
+        document.dispatchEvent(new Event('selectionchange'));
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('inserts composition text before a mention instead of swallowing it', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        const externalInput = vi.fn();
+        editor.addEventListener('input', externalInput);
+
+        setCaret(span.firstChild, 0);
+        const event = beforeInput(editor, 'insertCompositionText', 'Ж');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(editor.textContent.startsWith('Ж@Alice')).toBe(true);
+        expect(externalInput).toHaveBeenCalledTimes(1);
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+
+        mention.destroy();
+    });
+
+    it('does not swallow a browser-managed paste at the start of a mention', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span.firstChild, 0);
+        const event = beforeInput(editor, 'insertFromPaste');
+
+        expect(event.defaultPrevented).toBe(false);
+
+        // Simulate the browser mutation that follows the non-cancelled beforeinput.
+        span.firstChild.textContent = 'pasted@Alice';
+        setCaret(span.firstChild, 6);
+        input(editor);
+
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('keeps replacement text outside a committed mention when typed at its end', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span.firstChild, span.textContent.length);
+        const event = beforeInput(editor, 'insertReplacementText', 'X');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(span.textContent).toBe('@Alice');
+        expect(editor.textContent).toBe('@Alice\u00A0X');
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+
+        mention.destroy();
+    });
+});
