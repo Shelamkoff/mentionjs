@@ -516,8 +516,9 @@
     }
 
     class TextareaMentionStore {
-        constructor(initialValue = '') {
+        constructor(initialValue = '', trigger = '@') {
             this._value = initialValue;
+            this._trigger = trigger;
             this._edit = null;
             this._mentions = [];
         }
@@ -578,6 +579,14 @@
                     return false;
                 });
             }
+
+            this._mentions = this._mentions.filter((mention) => (
+                mention.start >= 0 &&
+                mention.end >= mention.start &&
+                mention.end <= text.length &&
+                text.substring(mention.start, mention.end) ===
+                    this._trigger + mention.name
+            ));
 
             this.acknowledge(text);
         }
@@ -698,7 +707,7 @@
             this._ui = new DropdownUI(this._opts, this._dropdownId);
             this._searchSession = new SearchSession(this._opts);
             this._textareaMentions = this._isTextarea
-                ? new TextareaMentionStore(element.value)
+                ? new TextareaMentionStore(element.value, this._opts.trigger)
                 : null;
 
             this._selectedIndex = 0;

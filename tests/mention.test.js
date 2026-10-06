@@ -3149,3 +3149,72 @@ describe('MentionJS non-cancelable beforeinput safety', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS controlled native textarea input', () => {
+    it('drops stale mention metadata when an earlier listener replaces the whole value', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        textarea.addEventListener('input', () => {
+            if (textarea.value.startsWith('Q')) {
+                textarea.value = 'controlled';
+                textarea.setSelectionRange(
+                    textarea.value.length,
+                    textarea.value.length
+                );
+            }
+        });
+
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 1, name: 'Alice' });
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 0, end: 6 },
+        ]);
+
+        textarea.focus();
+        textarea.setSelectionRange(0, 0);
+        beforeInput(textarea, 'insertText', 'Q');
+
+        // Simulate the browser's native insertion before the input event.
+        textarea.value = 'Q' + textarea.value;
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        expect(textarea.value).toBe('controlled');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('keeps metadata when a controlled listener changes unrelated text but preserves the range', () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = 'prefix ';
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const expected = mention.getMentions()[0];
+        expect(textarea.value.slice(expected.start, expected.end)).toBe('@Alice');
+
+        textarea.addEventListener('input', () => {
+            textarea.value = textarea.value.replace('prefix', 'PREFIX');
+        });
+
+        textarea.setSelectionRange(0, 6);
+        beforeInput(textarea, 'insertReplacementText', 'PREFIX');
+        textarea.value = textarea.value.replace('prefix', 'PREFIX');
+        textarea.setSelectionRange(6, 6);
+        input(textarea);
+
+        const mentions = mention.getMentions();
+        expect(mentions).toHaveLength(1);
+        expect(textarea.value.slice(mentions[0].start, mentions[0].end))
+            .toBe('@Alice');
+
+        mention.destroy();
+    });
+});
