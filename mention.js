@@ -1265,12 +1265,14 @@
             const mentionText = this._opts.trigger + data.name;
             const before = this._el.value.substring(0, this._mentionStart);
             const after = this._el.value.substring(this._mentionEnd);
+            const hasSeparator = /^[\s\u00A0]/.test(after);
+            const separator = hasSeparator ? '' : ' ';
 
-            this._el.value = before + mentionText + ' ' + after;
+            this._el.value = before + mentionText + separator + after;
             this._textareaMentions.replaceRange(
                 this._mentionStart,
                 this._mentionEnd,
-                mentionText.length + 1,
+                mentionText.length + separator.length,
                 {
                     id: data.id,
                     name: data.name,
@@ -1280,7 +1282,7 @@
             );
             this._textareaMentions.acknowledge(this._el.value);
 
-            const newPos = this._mentionStart + mentionText.length + 1;
+            const newPos = this._mentionStart + mentionText.length + (hasSeparator ? 1 : separator.length);
             this._el.setSelectionRange(newPos, newPos);
             this._el.focus();
             this._closeDropdown();
@@ -1808,9 +1810,12 @@
                 const hasCaret = document.activeElement === this._el;
                 const start = hasCaret ? (this._el.selectionStart ?? text.length) : text.length;
                 const end = hasCaret ? (this._el.selectionEnd ?? start) : start;
-                const insertion = mentionText + ' ';
+                const after = text.substring(end);
+                const hasSeparator = /^[\s\u00A0]/.test(after);
+                const separator = hasSeparator ? '' : ' ';
+                const insertion = mentionText + separator;
 
-                this._el.value = text.substring(0, start) + insertion + text.substring(end);
+                this._el.value = text.substring(0, start) + insertion + after;
                 this._textareaMentions.replaceRange(
                     start,
                     end,
@@ -1823,7 +1828,7 @@
                     }
                 );
 
-                const pos = start + insertion.length;
+                const pos = start + insertion.length + (hasSeparator ? 1 : 0);
                 this._textareaMentions.acknowledge(this._el.value);
                 this._el.setSelectionRange(pos, pos);
                 this._el.focus();
