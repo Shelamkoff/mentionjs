@@ -3020,3 +3020,47 @@ describe('MentionJS Unicode avatar placeholders', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS contenteditable attribute semantics', () => {
+    it('treats contenteditable values case-insensitively', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'TRUE');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        expect(mention).toBeInstanceOf(MentionJS);
+        mention.destroy();
+    });
+
+    it('respects an inherited editable ancestor when determining the editing host', () => {
+        const outer = document.createElement('div');
+        outer.setAttribute('contenteditable', 'true');
+        const middle = document.createElement('div');
+        const inner = document.createElement('div');
+        inner.setAttribute('contenteditable', 'true');
+        middle.appendChild(inner);
+        outer.appendChild(middle);
+        document.body.appendChild(outer);
+
+        expect(() => new MentionJS(inner)).toThrow(/editing host/);
+    });
+
+    it('respects a contenteditable=false boundary before a nested editable island', () => {
+        const outer = document.createElement('div');
+        outer.setAttribute('contenteditable', 'true');
+        const boundary = document.createElement('div');
+        boundary.setAttribute('contenteditable', 'false');
+        const middle = document.createElement('div');
+        const inner = document.createElement('div');
+        inner.setAttribute('contenteditable', 'true');
+        middle.appendChild(inner);
+        boundary.appendChild(middle);
+        outer.appendChild(boundary);
+        document.body.appendChild(outer);
+
+        const mention = new MentionJS(inner);
+        expect(mention).toBeInstanceOf(MentionJS);
+        mention.destroy();
+    });
+});

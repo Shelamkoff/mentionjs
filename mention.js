@@ -92,6 +92,27 @@
         };
     }
 
+    function contentEditableState(element) {
+        let current = element;
+
+        while (current instanceof HTMLElement) {
+            const raw = current.getAttribute('contenteditable');
+
+            if (raw !== null) {
+                const value = raw.trim().toLowerCase();
+
+                if (value === '' || value === 'true' || value === 'plaintext-only') {
+                    return true;
+                }
+                if (value === 'false') return false;
+            }
+
+            current = current.parentElement;
+        }
+
+        return false;
+    }
+
     function createElement(tag, className) {
         const el = document.createElement(tag);
         if (className) el.className = className;
@@ -633,14 +654,15 @@
 
             const tagName = element.tagName.toLowerCase();
             const contentEditable = element.getAttribute('contenteditable');
+            const contentEditableValue = contentEditable?.trim().toLowerCase();
             const isTextarea = tagName === 'textarea';
             const isContentEditable =
-                contentEditable === '' ||
-                contentEditable === 'true' ||
-                contentEditable === 'plaintext-only';
+                contentEditableValue === '' ||
+                contentEditableValue === 'true' ||
+                contentEditableValue === 'plaintext-only';
             const isEditingHost =
                 isContentEditable &&
-                !element.parentElement?.isContentEditable;
+                !contentEditableState(element.parentElement);
 
             if (!isTextarea && !isEditingHost) {
                 throw new Error('MentionJS: element must be a textarea or contenteditable editing host');
