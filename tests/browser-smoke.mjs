@@ -290,6 +290,102 @@ try {
     assert(backspace.text === '' && !backspace.span,
         'Backspace did not remove trigger-only token cleanly');
 
+    // 5. Native undo/redo must never leave mention metadata detached from text.
+    await execute(`
+        window.__instance?.destroy();
+        const textarea = document.getElementById('textarea');
+        textarea.value = '';
+        textarea.focus();
+        window.__instance = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 10, name: 'Alice' }],
+        });
+    `);
+    await sendKeys('@a');
+    await waitFor(
+        () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+        Boolean,
+        'Textarea dropdown did not open before undo/redo check'
+    );
+    await sendKeys('\uE007');
+
+    const assertTextareaMentionConsistency = async (label) => {
+        const state = await execute(`
+            const textarea = document.getElementById('textarea');
+            return {
+                value: textarea.value,
+                mentions: window.__instance.getMentions(),
+            };
+        `);
+
+        for (const mention of state.mentions) {
+            assert(
+                state.value.slice(mention.start, mention.end) === '@' + mention.name,
+                label + ': textarea mention metadata is stale'
+            );
+        }
+    };
+
+    await sendKeys('\uE009z\uE000'); // Control+Z
+    await sleep(100);
+    await assertTextareaMentionConsistency('undo');
+
+    await sendKeys('\uE009\uE008z\uE000'); // Control+Shift+Z
+    await sleep(100);
+    await assertTextareaMentionConsistency('redo');
+
+    await execute(`
+        window.__instance.destroy();
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '';
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 11, name: 'Bob' }],
+        });
+    `);
+    await sendKeys('@b');
+    await waitFor(
+        () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+        Boolean,
+        'Contenteditable dropdown did not open before undo/redo check'
+    );
+    await sendKeys('\uE007');
+
+    const assertEditableMentionConsistency = async (label) => {
+        const state = await execute(`
+            const editor = document.getElementById('editor');
+            return Array.from(
+                editor.querySelectorAll('span[data-mention-id][data-mention-name]')
+            ).map((span) => ({
+                text: span.textContent,
+                name: span.dataset.mentionName,
+                active: span.classList.contains('active'),
+            }));
+        `);
+
+        for (const mention of state) {
+            assert(
+                mention.text === '@' + mention.name && !mention.active,
+                label + ': contenteditable mention metadata is stale'
+            );
+        }
+    };
+
+    await sendKeys('\uE009z\uE000'); // Control+Z
+    await sleep(100);
+    await assertEditableMentionConsistency('undo');
+
+    await sendKeys('\uE009\uE008z\uE000'); // Control+Shift+Z
+    await sleep(100);
+    await assertEditableMentionConsistency('redo');
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log('MentionJS Chromium smoke tests passed');
 } catch (error) {
