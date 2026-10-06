@@ -2995,3 +2995,28 @@ describe('MentionJS actual contenteditable editing hosts', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS Unicode avatar placeholders', () => {
+    it('renders the first full grapheme for names beginning with emoji', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: '😊 Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(
+                document.querySelector('.mention-avatar-placeholder')?.textContent
+            ).toBe('😊');
+        });
+
+        mention.destroy();
+    });
+});

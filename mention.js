@@ -205,7 +205,8 @@
                 el.appendChild(img);
             } else {
                 const placeholder = createElement('div', 'mention-avatar-placeholder');
-                placeholder.textContent = (data.name || '?').charAt(0).toUpperCase();
+                const firstGrapheme = graphemeSegments(data.name || '?')[0]?.segment || '?';
+                placeholder.textContent = firstGrapheme.toUpperCase();
                 el.appendChild(placeholder);
             }
 
