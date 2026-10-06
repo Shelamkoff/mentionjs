@@ -1,7 +1,7 @@
 # MentionJS
 
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
-No dependencies. ~8.5 KB gzipped. TypeScript definitions included.
+No dependencies. ~9.5 KB gzipped. TypeScript definitions included.
 
 **[Live Demo](https://shelamkoff.github.io/mentionjs/demo.html)**
 
