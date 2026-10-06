@@ -1729,7 +1729,7 @@ describe('MentionJS composition, paste, and textarea selections', () => {
         mention.destroy();
     });
 
-    it('inserts composition text before a mention instead of swallowing it', async () => {
+    it('moves IME composition before a mention without swallowing browser input', () => {
         const editor = document.createElement('div');
         editor.setAttribute('contenteditable', 'true');
         document.body.appendChild(editor);
@@ -1738,15 +1738,20 @@ describe('MentionJS composition, paste, and textarea selections', () => {
         mention.push({ id: 1, name: 'Alice' });
         const span = editor.querySelector('span.mention');
 
-        const externalInput = vi.fn();
-        editor.addEventListener('input', externalInput);
-
         setCaret(span.firstChild, 0);
+        editor.dispatchEvent(new CompositionEvent('compositionstart', {
+            bubbles: true,
+            data: '',
+        }));
         const event = beforeInput(editor, 'insertCompositionText', 'Ж');
 
-        expect(event.defaultPrevented).toBe(true);
-        expect(editor.textContent.startsWith('Ж@Alice')).toBe(true);
-        expect(externalInput).toHaveBeenCalledTimes(1);
+        expect(event.defaultPrevented).toBe(false);
+
+        const selection = window.getSelection();
+        expect(selection.anchorNode).toBe(editor);
+        expect(selection.anchorOffset).toBe(
+            Array.from(editor.childNodes).indexOf(span)
+        );
         expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
 
         mention.destroy();
