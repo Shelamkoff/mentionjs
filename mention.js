@@ -28,6 +28,7 @@
     };
 
     let instanceCounter = 0;
+    const activeInstances = new WeakMap();
     const SEARCH_CANCELLED = Symbol('MentionJS search cancelled');
     const SEARCH_FAILED = Symbol('MentionJS search failed');
     const graphemeSegmenter = typeof Intl?.Segmenter === 'function'
@@ -640,6 +641,10 @@
                 throw new Error('MentionJS: element must be a textarea or contenteditable editing host');
             }
 
+            if (activeInstances.has(element)) {
+                throw new Error('MentionJS: this editing host already has an active instance');
+            }
+
             this._opts = Object.assign({}, DEFAULTS, options);
 
             if (
@@ -683,6 +688,7 @@
             this._configureAccessibility();
             this._bindElementEvents();
             this._bindDocumentClick();
+            activeInstances.set(this._el, this);
         }
 
         _configureAccessibility() {
@@ -1505,16 +1511,20 @@
 
         _unwrapMentionSpan(span, sel = window.getSelection()) {
             const text = span.textContent || '';
-            let offset = text.length;
-
-            if (sel?.anchorNode?.nodeType === Node.TEXT_NODE && span.contains(sel.anchorNode)) {
-                offset = sel.anchorOffset;
-            }
+            const selectionInside =
+                !!sel &&
+                sel.rangeCount > 0 &&
+                !!sel.anchorNode &&
+                span.contains(sel.anchorNode);
+            const offset =
+                selectionInside && sel.anchorNode.nodeType === Node.TEXT_NODE
+                    ? sel.anchorOffset
+                    : text.length;
 
             const textNode = document.createTextNode(text);
             span.replaceWith(textNode);
 
-            if (sel) {
+            if (selectionInside) {
                 setCaretAt(textNode, Math.min(offset, text.length));
             }
 
@@ -1782,8 +1792,7 @@
                 span.removeAttribute('id');
 
                 if (!isCommitted) {
-                    span.classList.remove('mention');
-                    delete span.dataset.mentionjsToken;
+                    this._unwrapMentionSpan(span, window.getSelection());
                 }
             }
 
@@ -2021,6 +2030,10 @@
             this._unbindElementEvents();
             this._unbindDocumentClick();
             this._restoreAccessibility();
+
+            if (activeInstances.get(this._el) === this) {
+                activeInstances.delete(this._el);
+            }
         }
 
         static create(element, options) {

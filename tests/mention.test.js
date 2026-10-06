@@ -2259,3 +2259,79 @@ describe('MentionJS framework-controlled DOM lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS instance and cancelled-token cleanup', () => {
+    it('rejects two active instances on the same editing host', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const first = new MentionJS(textarea);
+        expect(() => new MentionJS(textarea)).toThrow(/already has an active instance/);
+
+        first.destroy();
+
+        const second = new MentionJS(textarea);
+        expect(second).toBeInstanceOf(MentionJS);
+        second.destroy();
+    });
+
+    it('unwraps a cancelled pending token to plain text without leaving wrapper markup', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(editor.querySelector('span.mention')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.textContent).toBe('@');
+        expect(editor.querySelector('span')).toBeNull();
+        mention.destroy();
+    });
+
+    it('does not steal selection back when a pending token is cancelled from outside', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        const outside = document.createElement('input');
+        document.body.append(editor, outside);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(editor.querySelector('span.mention')).not.toBeNull();
+        });
+
+        outside.focus();
+        outside.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            composed: true,
+        }));
+
+        expect(document.activeElement).toBe(outside);
+        expect(editor.textContent).toBe('@');
+        expect(editor.querySelector('span')).toBeNull();
+
+        mention.destroy();
+    });
+});
