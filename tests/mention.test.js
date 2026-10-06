@@ -1561,3 +1561,48 @@ describe('MentionJS outside-click and connected DOM lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS contenteditable line boundaries', () => {
+    it('allows a trigger at the start of a new block after non-whitespace text', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<div>first</div><div>second</div>';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+
+        const secondText = editor.children[1].firstChild;
+        setCaret(secondText, 0);
+        const event = beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(event.defaultPrevented).toBe(true);
+            expect(searchFunction).toHaveBeenCalledWith('', null);
+        });
+
+        mention.destroy();
+    });
+
+    it('allows a trigger immediately after a br boundary', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = 'first<br>second';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+
+        const secondText = editor.lastChild;
+        setCaret(secondText, 0);
+        const event = beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(event.defaultPrevented).toBe(true);
+            expect(searchFunction).toHaveBeenCalledWith('', null);
+        });
+
+        mention.destroy();
+    });
+});

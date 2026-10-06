@@ -1436,18 +1436,69 @@
             return false;
         }
 
+        _isBlockBoundaryElement(node) {
+            if (!(node instanceof Element)) return false;
+            if (node.tagName === 'BR') return true;
+
+            const blockTags = new Set([
+                'ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', 'DIV', 'DL', 'DT',
+                'FIELDSET', 'FIGCAPTION', 'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2',
+                'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL',
+                'P', 'PRE', 'SECTION', 'TABLE', 'UL',
+            ]);
+            if (blockTags.has(node.tagName)) return true;
+
+            const display = window.getComputedStyle(node).display;
+            return display === 'block' ||
+                display === 'list-item' ||
+                display === 'table' ||
+                display === 'flex' ||
+                display === 'grid' ||
+                display === 'flow-root' ||
+                display.startsWith('table-');
+        }
+
+        _charBeforeCaret(sel) {
+            if (!sel || sel.rangeCount === 0) return null;
+
+            const range = sel.getRangeAt(0);
+            const container = range.startContainer;
+            const offset = range.startOffset;
+
+            if (container.nodeType === Node.TEXT_NODE && offset > 0) {
+                return container.textContent[offset - 1];
+            }
+
+            if (container.nodeType === Node.ELEMENT_NODE && offset > 0) {
+                const prev = container.childNodes[offset - 1];
+                if (this._isBlockBoundaryElement(prev)) return '\n';
+
+                const textNode = this._findEdgeTextNode(prev, true);
+                if (textNode?.textContent?.length) return textNode.textContent.slice(-1);
+            }
+
+            let current = container;
+            while (current && current !== this._el) {
+                const prev = current.previousSibling;
+                if (prev) {
+                    if (this._isBlockBoundaryElement(prev)) return '\n';
+
+                    const textNode = this._findEdgeTextNode(prev, true);
+                    if (textNode?.textContent?.length) return textNode.textContent.slice(-1);
+                }
+
+                const parent = current.parentNode;
+                if (!parent) break;
+                if (parent !== this._el && this._isBlockBoundaryElement(parent)) return '\n';
+                current = parent;
+            }
+
+            return null;
+        }
+
         _canInsertMentionHere(sel) {
-            if (!sel || sel.rangeCount === 0) return true;
-
-            const caret = sel.getRangeAt(0);
-            const before = document.createRange();
-            before.selectNodeContents(this._el);
-            before.setEnd(caret.startContainer, caret.startOffset);
-
-            const textBeforeCaret = before.toString();
-            const charBefore = textBeforeCaret.slice(-1);
-
-            return charBefore === '' || /[\s\u00A0]/.test(charBefore);
+            const charBefore = this._charBeforeCaret(sel);
+            return charBefore === null || /[\s\u00A0]/.test(charBefore);
         }
 
         _insertMentionSpan(sel) {
