@@ -1568,9 +1568,31 @@
                     event = new Event('input', { bubbles: true });
                 }
                 this._el.dispatchEvent(event);
+                this._reconcileCommittedContentEditableMentions();
             } finally {
                 this._suppressSyntheticContentEditableInput = false;
             }
+        }
+
+        _reconcileCommittedContentEditableMentions() {
+            const selection = window.getSelection();
+            const committed = Array.from(
+                this._el.querySelectorAll(
+                    'span.mention[data-mention-id][data-mention-name]'
+                )
+            );
+
+            committed.forEach((span) => {
+                const expected = this._opts.trigger + span.dataset.mentionName;
+                if (span.textContent === expected) return;
+
+                delete span.dataset.mentionId;
+                delete span.dataset.mentionName;
+                delete span.dataset.mentionjsToken;
+                span.classList.remove('mention', 'active');
+
+                if (span.isConnected) this._unwrapMentionSpan(span, selection);
+            });
         }
 
         _fireSelect(data) {
@@ -2052,10 +2074,14 @@
                 this._el.querySelectorAll(
                     'span.mention:not(.active)[data-mention-id][data-mention-name]'
                 )
-            ).map((el) => ({
-                id: el.dataset.mentionId,
-                name: el.dataset.mentionName,
-            }));
+            )
+                .filter((el) => (
+                    el.textContent === this._opts.trigger + el.dataset.mentionName
+                ))
+                .map((el) => ({
+                    id: el.dataset.mentionId,
+                    name: el.dataset.mentionName,
+                }));
         }
 
         /**

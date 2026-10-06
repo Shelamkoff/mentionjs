@@ -3380,3 +3380,96 @@ describe('MentionJS textarea mention ordering', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS controlled contenteditable commit', () => {
+    it('drops stale metadata when an external listener rewrites committed text', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        editor.addEventListener('input', () => {
+            const span = editor.querySelector(
+                'span[data-mention-id][data-mention-name]'
+            );
+            if (span) span.textContent = '@Controlled';
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.textContent).toContain('@Controlled');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.querySelector('[data-mention-id]')).toBeNull();
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('preserves externally controlled metadata when visible text still matches', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        editor.addEventListener('input', () => {
+            const span = editor.querySelector(
+                'span[data-mention-id][data-mention-name]'
+            );
+            if (span) {
+                span.dataset.mentionId = '9';
+                span.dataset.mentionName = 'Alice';
+                span.textContent = '@Alice';
+            }
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(mention.getMentions()).toEqual([{ id: '9', name: 'Alice' }]);
+
+        mention.destroy();
+    });
+
+    it('filters stale preloaded metadata from getMentions()', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML =
+            '<span class="mention" data-mention-id="1" data-mention-name="Alice">@Other</span>';
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+});
