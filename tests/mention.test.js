@@ -2451,3 +2451,28 @@ describe('MentionJS trigger-only deletion cleanup', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS direct text-node Unicode boundary', () => {
+    it('backspace before a mention removes a whole emoji from an adjacent text node', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.appendChild(document.createTextNode('A😊'));
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        editor.focus();
+        setCaret(editor.firstChild, editor.firstChild.textContent.length);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, 0);
+        beforeInput(editor, 'deleteContentBackward');
+
+        expect(editor.firstChild.nodeType).toBe(Node.TEXT_NODE);
+        expect(editor.firstChild.textContent).toBe('A');
+        expect(editor.textContent.includes('\uFFFD')).toBe(false);
+
+        mention.destroy();
+    });
+});

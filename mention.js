@@ -1659,10 +1659,12 @@
             const prev = span.previousSibling;
 
             if (prev?.nodeType === Node.TEXT_NODE && prev.textContent.length > 0) {
-                prev.textContent = prev.textContent.slice(0, -1);
+                const text = prev.textContent;
+                const removal = removeGraphemeBefore(text, text.length);
+                prev.textContent = removal.text;
                 if (prev.textContent.length === 0) prev.remove();
                 setCaretBeforeNode(span);
-                return true;
+                return removal.text !== text;
             }
 
             if (this._isMentionSpan(prev)) {
