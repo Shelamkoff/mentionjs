@@ -1355,3 +1355,53 @@ describe('MentionJS search failure handling', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS stale search failures', () => {
+    it('ignores a stale rejection after a newer query has succeeded', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let rejectOld;
+        const oldRequest = new Promise((_, reject) => {
+            rejectOld = reject;
+        });
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const searchFunction = vi.fn((query) => {
+            if (query === 'a') return oldRequest;
+            return Promise.resolve([{ id: 2, name: 'New Result' }]);
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('a', null);
+        });
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('New Result');
+        });
+
+        rejectOld(new Error('old request failed'));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-name')?.textContent).toBe('New Result');
+        expect(warning).not.toHaveBeenCalled();
+
+        mention.destroy();
+    });
+});

@@ -372,7 +372,7 @@
                     raw = await execute();
                 }
             } catch (err) {
-                if (err === SEARCH_CANCELLED) return null;
+                if (err === SEARCH_CANCELLED || requestId !== this._requestId) return null;
                 console.warn('MentionJS: search failed', err);
                 return SEARCH_FAILED;
             }
