@@ -731,11 +731,6 @@
             if (!this._ui.el) return;
 
             if (this._isTextarea) {
-                if (document.activeElement !== this._el) {
-                    this._closeDropdown();
-                    return;
-                }
-
                 const token = this._findTokenAtCursor(this._el.value, this._el.selectionStart);
                 if (!token) {
                     this._closeDropdown();
