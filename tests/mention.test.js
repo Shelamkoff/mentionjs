@@ -209,6 +209,7 @@ describe('MentionJS interaction consistency', () => {
         });
 
         textarea.value = '@';
+        textarea.focus();
         textarea.setSelectionRange(1, 1);
         input(textarea);
 
@@ -257,6 +258,7 @@ describe('MentionJS interaction consistency', () => {
         });
 
         textarea.value = '@';
+        textarea.focus();
         textarea.setSelectionRange(1, 1);
         input(textarea);
 
