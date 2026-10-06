@@ -637,8 +637,11 @@
                 contentEditable === '' ||
                 contentEditable === 'true' ||
                 contentEditable === 'plaintext-only';
+            const isEditingHost =
+                isContentEditable &&
+                !element.parentElement?.isContentEditable;
 
-            if (!isTextarea && !isContentEditable) {
+            if (!isTextarea && !isEditingHost) {
                 throw new Error('MentionJS: element must be a textarea or contenteditable editing host');
             }
 

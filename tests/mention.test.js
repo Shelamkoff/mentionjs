@@ -2965,3 +2965,33 @@ describe('MentionJS teardown after textarea deletion keys', () => {
         expect(document.querySelector('.mention-dropdown')).toBeNull();
     });
 });
+
+
+describe('MentionJS actual contenteditable editing hosts', () => {
+    it('rejects a nested editable element whose parent is also editable', () => {
+        const outer = document.createElement('div');
+        outer.setAttribute('contenteditable', 'true');
+        const inner = document.createElement('div');
+        inner.setAttribute('contenteditable', 'true');
+        outer.appendChild(inner);
+        document.body.appendChild(outer);
+
+        expect(() => new MentionJS(inner)).toThrow(/editing host/);
+    });
+
+    it('accepts an editable island inside a non-editable boundary', () => {
+        const outer = document.createElement('div');
+        outer.setAttribute('contenteditable', 'true');
+        const boundary = document.createElement('div');
+        boundary.setAttribute('contenteditable', 'false');
+        const inner = document.createElement('div');
+        inner.setAttribute('contenteditable', 'true');
+        boundary.appendChild(inner);
+        outer.appendChild(boundary);
+        document.body.appendChild(outer);
+
+        const mention = new MentionJS(inner);
+        expect(mention).toBeInstanceOf(MentionJS);
+        mention.destroy();
+    });
+});
