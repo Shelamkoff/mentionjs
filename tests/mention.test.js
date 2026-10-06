@@ -3473,3 +3473,106 @@ describe('MentionJS controlled contenteditable commit', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS onMentionSelect state reconciliation', () => {
+    it('reconciles textarea metadata after onMentionSelect rewrites the value', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            onMentionSelect: () => {
+                textarea.value = 'callback-controlled';
+            },
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('callback-controlled');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('reconciles contenteditable metadata after onMentionSelect rewrites committed text', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            onMentionSelect: () => {
+                const span = editor.querySelector('[data-mention-id]');
+                if (span) span.textContent = '@Changed';
+            },
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.textContent).toContain('@Changed');
+        expect(editor.querySelector('[data-mention-id]')).toBeNull();
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('reconciles state even when onMentionSelect throws', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const error = new Error('callback failed');
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            onMentionSelect: () => {
+                textarea.value = 'changed-before-throw';
+                throw error;
+            },
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        expect(() => textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }))).not.toThrow();
+
+        expect(textarea.value).toBe('changed-before-throw');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+});

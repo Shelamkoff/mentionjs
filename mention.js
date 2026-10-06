@@ -1596,8 +1596,16 @@
         }
 
         _fireSelect(data) {
-            if (typeof this._opts.onMentionSelect === 'function') {
-                this._opts.onMentionSelect({ id: data.id, name: data.name });
+            try {
+                if (typeof this._opts.onMentionSelect === 'function') {
+                    this._opts.onMentionSelect({ id: data.id, name: data.name });
+                }
+            } finally {
+                if (this._isTextarea) {
+                    this._textareaMentions.reconcile(this._el.value);
+                } else {
+                    this._reconcileCommittedContentEditableMentions();
+                }
             }
         }
 
