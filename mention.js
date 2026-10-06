@@ -936,6 +936,25 @@
 
             const isAtStart = cursorInText === 0;
             const isAtEnd = cursorInText === spanText.length;
+            const browserManagedSelectionEdit =
+                !sel.isCollapsed &&
+                (
+                    e.inputType.startsWith('delete') ||
+                    [
+                        'insertText',
+                        'insertCompositionText',
+                        'insertFromPaste',
+                        'insertFromDrop',
+                        'insertReplacementText',
+                    ].includes(e.inputType)
+                );
+
+            if (browserManagedSelectionEdit) {
+                this._invalidateMentionMetadata(span);
+                if (!isActive) span.classList.add('active');
+                this._mentionSpan = span;
+                return;
+            }
 
             if (isAtStart) {
                 e.preventDefault();

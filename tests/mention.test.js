@@ -1405,3 +1405,80 @@ describe('MentionJS stale search failures', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS selections inside mentions', () => {
+    it('lets the browser delete an internal selected range and searches the resulting text', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const text = span.firstChild;
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(text, 2);
+        range.setEnd(text, 5);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const event = beforeInput(editor, 'deleteContentBackward');
+
+        expect(event.defaultPrevented).toBe(false);
+
+        text.textContent = '@Ae';
+        setCaret(text, 2);
+        input(editor);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('Ae', null);
+        });
+
+        expect(span.textContent).toBe('@Ae');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('lets the browser replace a selection beginning at the trigger', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const text = span.firstChild;
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, 3);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const event = beforeInput(editor, 'insertText', 'X');
+        expect(event.defaultPrevented).toBe(false);
+
+        text.textContent = 'Xice';
+        setCaret(text, 1);
+        input(editor);
+
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.textContent.includes('Xice')).toBe(true);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+});
