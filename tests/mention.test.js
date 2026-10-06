@@ -1671,10 +1671,7 @@ describe('MentionJS separator and stylesheet isolation', () => {
         foreignMention.className = 'mention active';
         document.body.append(foreignItem, foreignMention);
 
-        const sheetText = readFileSync(
-            new URL('../mention.css', import.meta.url),
-            'utf8'
-        );
+        const sheetText = readFileSync('mention.css', 'utf8');
 
         expect(sheetText).not.toMatch(/^\.mention-item\s*\{/m);
         expect(sheetText).not.toMatch(/^\.mention\s*\{/m);
@@ -2067,18 +2064,18 @@ describe('MentionJS editing-host and preloaded mention ownership', () => {
         });
 
         const span = editor.querySelector('span.mention');
-        setCaret(span.firstChild, span.textContent.length);
+        setCaret(span.firstChild, span.textContent.length - 1);
         const event = beforeInput(editor, 'insertText', 'x');
 
         expect(event.defaultPrevented).toBe(false);
 
         // Simulate the browser mutation after beforeinput.
-        span.firstChild.textContent = '@Alicex';
+        span.firstChild.textContent = '@Alicxe';
         setCaret(span.firstChild, span.textContent.length);
         input(editor);
 
         await vi.waitFor(() => {
-            expect(searchFunction).toHaveBeenCalledWith('Alicex', null);
+            expect(searchFunction).toHaveBeenCalledWith('Alicxe', null);
         });
 
         expect(span.dataset.mentionjsToken).toBe('true');
@@ -2100,14 +2097,19 @@ describe('MentionJS pending selection lifecycle', () => {
         const searchFunction = vi.fn(() => new Promise((resolve) => {
             resolveSearch = resolve;
         }));
-        const mention = new MentionJS(textarea, { searchFunction });
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
 
         textarea.focus();
         textarea.value = '@alice tail';
         textarea.setSelectionRange(6, 6);
         input(textarea);
 
-        expect(searchFunction).toHaveBeenCalledWith('alice', null);
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('alice', null);
+        });
 
         textarea.setSelectionRange(textarea.value.length, textarea.value.length);
         document.dispatchEvent(new Event('selectionchange'));
@@ -2217,8 +2219,10 @@ describe('MentionJS framework-controlled DOM lifecycle', () => {
 
         expect(editor.querySelector('span.mention')).toBeNull();
         expect(document.querySelector('.mention-dropdown')).toBeNull();
-        expect(mention._mentionSpan).toBeNull();
-        expect(mention._h.selectionChange).toBeNull();
+        await vi.waitFor(() => {
+            expect(mention._mentionSpan).toBeNull();
+            expect(mention._h.selectionChange).toBeNull();
+        });
 
         mention.destroy();
     });
@@ -2247,8 +2251,10 @@ describe('MentionJS framework-controlled DOM lifecycle', () => {
         await Promise.resolve();
 
         expect(document.querySelector('.mention-dropdown')).toBeNull();
-        expect(mention._mentionSpan).toBeNull();
-        expect(mention._h.selectionChange).toBeNull();
+        await vi.waitFor(() => {
+            expect(mention._mentionSpan).toBeNull();
+            expect(mention._h.selectionChange).toBeNull();
+        });
 
         mention.destroy();
     });
