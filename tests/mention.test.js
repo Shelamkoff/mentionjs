@@ -1224,3 +1224,134 @@ describe('MentionJS pending search cancellation', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS search failure handling', () => {
+    it('closes stale results when the current top-level search fails', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const searchFunction = vi.fn((query) => {
+            if (query === 'a') return Promise.resolve([{ id: 1, name: 'Alice' }]);
+            return Promise.reject(new Error('offline'));
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('Alice');
+        });
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: search failed',
+                expect.any(Error)
+            );
+            expect(document.querySelector('.mention-dropdown')).toBeNull();
+        });
+
+        mention.destroy();
+    });
+
+    it('keeps loaded results and allows retry when pagination fails', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let pageAttempts = 0;
+        const searchFunction = vi.fn((query, nextPageUrl) => {
+            if (nextPageUrl) {
+                pageAttempts++;
+                if (pageAttempts === 1) return Promise.reject(new Error('page failed'));
+                return Promise.resolve({
+                    items: [{ id: 3, name: 'Charlie' }],
+                    nextPageUrl: null,
+                });
+            }
+
+            return Promise.resolve({
+                items: [
+                    { id: 1, name: 'Alice' },
+                    { id: 2, name: 'Bob' },
+                ],
+                nextPageUrl: '/next',
+            });
+        });
+
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]')).toHaveLength(2);
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: search failed',
+                expect.any(Error)
+            );
+        });
+
+        expect(document.querySelectorAll('.mention-item[data-index]')).toHaveLength(2);
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]')).toHaveLength(3);
+        });
+
+        mention.destroy();
+    });
+
+    it('rejects malformed search result shapes without crashing the dropdown', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => ({ items: 'not-an-array', nextPageUrl: 42 }),
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: searchFunction returned an invalid result',
+                expect.anything()
+            );
+        });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+});

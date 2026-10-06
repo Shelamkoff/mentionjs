@@ -29,6 +29,7 @@
 
     let instanceCounter = 0;
     const SEARCH_CANCELLED = Symbol('MentionJS search cancelled');
+    const SEARCH_FAILED = Symbol('MentionJS search failed');
 
     function createElement(tag, className) {
         const el = document.createElement(tag);
@@ -373,13 +374,20 @@
             } catch (err) {
                 if (err === SEARCH_CANCELLED) return null;
                 console.warn('MentionJS: search failed', err);
-                return null;
+                return SEARCH_FAILED;
             }
 
             if (requestId !== this._requestId) return null;
 
             const items = raw?.items ?? (Array.isArray(raw) ? raw : []);
-            this._nextPageUrl = raw?.nextPageUrl ?? null;
+            const next = raw?.nextPageUrl ?? null;
+
+            if (!Array.isArray(items) || (next !== null && typeof next !== 'string')) {
+                console.warn('MentionJS: searchFunction returned an invalid result', raw);
+                return SEARCH_FAILED;
+            }
+
+            this._nextPageUrl = next;
             this._items = nextPageUrl ? [...this._items, ...items] : items;
 
             return items;
@@ -780,6 +788,10 @@
                     this._mentionEnd = token.end;
                     this._search(token.query).then((items) => {
                         if (items === null) return;
+                        if (items === SEARCH_FAILED) {
+                            this._closeDropdown();
+                            return;
+                        }
                         if (document.activeElement === this._el) this._openDropdown(items);
                     });
                 }
@@ -813,6 +825,10 @@
                 this._mentionEnd = token.end;
                 const items = await this._search(token.query);
                 if (items === null) return;
+                if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
                 this._openDropdown(items);
             } else {
                 this._closeDropdown();
@@ -863,6 +879,10 @@
                 this._dispatchContentEditableInput('insertText', this._opts.trigger);
                 const items = await this._search('');
                 if (items === null) return;
+                if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
                 if (this._inDOM(newSpan)) this._openDropdown(items);
             } else {
                 this._closeDropdown();
@@ -895,6 +915,10 @@
 
             const items = await this._search(text.substring(this._opts.trigger.length));
             if (items === null) return;
+            if (items === SEARCH_FAILED) {
+                this._closeDropdown();
+                return;
+            }
             if (this._inDOM(span)) this._openDropdown(items);
         }
 
@@ -1026,6 +1050,10 @@
 
                 const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
+                if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
                 if (this._inDOM(span)) this._openDropdown(items);
                 return;
             }
@@ -1090,6 +1118,10 @@
 
                 const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
+                if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
                 if (this._inDOM(span)) this._openDropdown(items);
                 return;
             }
@@ -1106,6 +1138,10 @@
                 // event reconciles the real DOM and supersedes this predicted query.
                 const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
+                if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
                 if (this._inDOM(span)) this._openDropdown(items);
             }
         }
@@ -1415,6 +1451,10 @@
                 const query = prev.textContent.substring(this._opts.trigger.length);
                 this._search(query).then((items) => {
                     if (items === null) return;
+                    if (items === SEARCH_FAILED) {
+                        this._closeDropdown();
+                        return;
+                    }
                     if (this._inDOM(prev)) this._openDropdown(items);
                 });
                 return false;
@@ -1643,7 +1683,7 @@
                     this._searchSession.nextPageUrl
                 );
                 this._ui.hideLoading();
-                if (newItems === null) return;
+                if (newItems === null || newItems === SEARCH_FAILED) return;
                 this._ui.appendItems(newItems, prevLen, this._selectedIndex);
             } catch (err) {
                 console.warn('MentionJS: load more failed', err);
