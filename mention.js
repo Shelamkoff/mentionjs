@@ -699,6 +699,26 @@
                 throw new Error('MentionJS: debounceDelay must be a non-negative finite number');
             }
 
+            for (const optionName of [
+                'searchFunction',
+                'onMentionSelect',
+                'renderItem',
+                'renderNoResults',
+                'renderLoading',
+            ]) {
+                const value = this._opts[optionName];
+                if (value !== null && value !== undefined && typeof value !== 'function') {
+                    throw new Error(`MentionJS: ${optionName} must be a function or null`);
+                }
+            }
+
+            if (typeof this._opts.noResultsText !== 'string') {
+                throw new Error('MentionJS: noResultsText must be a string');
+            }
+            if (typeof this._opts.dropdownClass !== 'string') {
+                throw new Error('MentionJS: dropdownClass must be a string');
+            }
+
             this._el = element;
             this._isTextarea = isTextarea;
             this._instanceId = ++instanceCounter;

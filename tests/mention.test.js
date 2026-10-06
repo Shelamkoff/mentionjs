@@ -3218,3 +3218,54 @@ describe('MentionJS controlled native textarea input', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS runtime option validation', () => {
+    it('rejects non-function callback options at construction time', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        for (const optionName of [
+            'searchFunction',
+            'onMentionSelect',
+            'renderItem',
+            'renderNoResults',
+            'renderLoading',
+        ]) {
+            expect(() => new MentionJS(textarea, {
+                [optionName]: 'not-a-function',
+            })).toThrow(new RegExp(optionName));
+        }
+    });
+
+    it('rejects non-string display options', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        expect(() => new MentionJS(textarea, {
+            noResultsText: 42,
+        })).toThrow(/noResultsText/);
+
+        expect(() => new MentionJS(textarea, {
+            dropdownClass: {},
+        })).toThrow(/dropdownClass/);
+    });
+
+    it('accepts null callback options and valid custom renderers', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: null,
+            onMentionSelect: null,
+            renderItem: () => document.createElement('div'),
+            renderNoResults: () => document.createElement('div'),
+            renderLoading: () => document.createElement('div'),
+            noResultsText: 'Nothing',
+            dropdownClass: 'custom',
+        });
+
+        expect(mention).toBeInstanceOf(MentionJS);
+        mention.destroy();
+    });
+});
