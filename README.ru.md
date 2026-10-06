@@ -138,13 +138,31 @@ type SearchFunction = (
 renderItem(data, index, isActive) {
     const el = document.createElement('div');
     el.className = 'mention-item' + (isActive ? ' mention-active' : '');
-    el.innerHTML = `
-        <img src="${data.avatar}" class="mention-avatar">
-        <div class="mention-info">
-            <div class="mention-name">${data.name}</div>
-            <span class="badge">${data.role}</span>
-        </div>
-    `;
+
+    if (data.avatar) {
+        const img = document.createElement('img');
+        img.src = data.avatar;
+        img.alt = '';
+        img.className = 'mention-avatar';
+        el.appendChild(img);
+    }
+
+    const info = document.createElement('div');
+    info.className = 'mention-info';
+
+    const name = document.createElement('div');
+    name.className = 'mention-name';
+    name.textContent = data.name;
+    info.appendChild(name);
+
+    if (data.role) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = data.role;
+        info.appendChild(badge);
+    }
+
+    el.appendChild(info);
     return el;
 }
 ```
