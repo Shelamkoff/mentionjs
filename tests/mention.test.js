@@ -2476,3 +2476,92 @@ describe('MentionJS direct text-node Unicode boundary', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS composition lifecycle', () => {
+    it('moves IME composition before a mention at its left boundary', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span.firstChild, 0);
+        editor.dispatchEvent(new CompositionEvent('compositionstart', {
+            bubbles: true,
+            data: '',
+        }));
+
+        const selection = window.getSelection();
+        expect(selection.anchorNode).toBe(editor);
+        expect(selection.anchorOffset).toBe(
+            Array.from(editor.childNodes).indexOf(span)
+        );
+
+        mention.destroy();
+    });
+
+    it('moves IME composition into trailing text at a committed mention end', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+        const trailing = span.nextSibling;
+
+        setCaret(span.firstChild, span.textContent.length);
+        editor.dispatchEvent(new CompositionEvent('compositionstart', {
+            bubbles: true,
+            data: '',
+        }));
+
+        const selection = window.getSelection();
+        expect(selection.anchorNode).toBe(trailing);
+        expect(selection.anchorOffset).toBe(0);
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+
+        mention.destroy();
+    });
+
+    it('leaves composition inside an active token browser-managed', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        editor.innerHTML =
+            '<span class="mention active" data-mentionjs-token="true">@a</span>';
+        const span = editor.firstChild;
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+
+        editor.dispatchEvent(new CompositionEvent('compositionstart', {
+            bubbles: true,
+            data: '',
+        }));
+        const before = beforeInput(editor, 'insertCompositionText', '日');
+
+        expect(before.defaultPrevented).toBe(false);
+
+        span.firstChild.textContent = '@a日';
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('a日', null);
+        });
+        expect(span.textContent).toBe('@a日');
+
+        mention.destroy();
+    });
+});

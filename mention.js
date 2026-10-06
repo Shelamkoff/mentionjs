@@ -751,9 +751,11 @@
                 this._h.beforeinput = (e) => this._onBeforeInput(e);
                 this._h.input = () => this._onContentEditableInput();
                 this._h.keydown = (e) => this._onContentEditableKeydown(e);
+                this._h.compositionstart = () => this._onContentEditableCompositionStart();
                 this._el.addEventListener('beforeinput', this._h.beforeinput);
                 this._el.addEventListener('input', this._h.input);
                 this._el.addEventListener('keydown', this._h.keydown);
+                this._el.addEventListener('compositionstart', this._h.compositionstart);
             }
 
             this._el.addEventListener('blur', this._h.blur);
@@ -768,6 +770,7 @@
                 this._el.removeEventListener('beforeinput', this._h.beforeinput);
                 this._el.removeEventListener('input', this._h.input);
                 this._el.removeEventListener('keydown', this._h.keydown);
+                this._el.removeEventListener('compositionstart', this._h.compositionstart);
             }
 
             this._el.removeEventListener('blur', this._h.blur);
@@ -973,6 +976,42 @@
             this._handleNavigationKey(e, (data) => this._commitTextareaMention(data));
         }
 
+        _onContentEditableCompositionStart() {
+            const sel = window.getSelection();
+            const span = this._getMentionSpan(sel);
+            if (!span || !sel?.isCollapsed) return;
+
+            const node = sel.anchorNode;
+            const offset = sel.anchorOffset;
+            const text = span.textContent || '';
+            const cursor =
+                node?.nodeType === Node.TEXT_NODE && node.parentElement === span
+                    ? offset
+                    : (node === span ? offset : null);
+
+            if (cursor === 0) {
+                this._closeDropdown();
+                setCaretBeforeNode(span);
+                return;
+            }
+
+            const isCommitted =
+                span.hasAttribute('data-mention-id') &&
+                span.hasAttribute('data-mention-name');
+
+            if (isCommitted && cursor === text.length) {
+                const next = span.nextSibling;
+                if (next?.nodeType === Node.TEXT_NODE) {
+                    setCaretAt(next, 0);
+                } else {
+                    const textNode = document.createTextNode('');
+                    span.after(textNode);
+                    setCaretAt(textNode, 0);
+                }
+                this._closeDropdown();
+            }
+        }
+
         async _onBeforeInput(e) {
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
@@ -1071,8 +1110,7 @@
                 this._closeDropdown();
 
                 const manuallyInsertedText =
-                    ['insertText', 'insertCompositionText', 'insertReplacementText']
-                        .includes(e.inputType) &&
+                    ['insertText', 'insertReplacementText'].includes(e.inputType) &&
                     typeof e.data === 'string' &&
                     e.data.length > 0;
 
@@ -1108,7 +1146,7 @@
 
             if (isAtEnd && !isActive) {
                 if (
-                    ['insertText', 'insertCompositionText', 'insertReplacementText'].includes(e.inputType) &&
+                    ['insertText', 'insertReplacementText'].includes(e.inputType) &&
                     typeof e.data === 'string' &&
                     e.data.length > 0
                 ) {
