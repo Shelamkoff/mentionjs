@@ -1023,7 +1023,7 @@
                 this._closeDropdown();
                 return;
             }
-            if (this._inDOM(span)) this._openDropdown(items);
+            this._openDropdownForSpan(items, span);
         }
 
         async _handleInputInsideSpan(e, span, sel) {
