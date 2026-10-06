@@ -331,6 +331,8 @@
             if (!nextPageUrl) {
                 this._currentQuery = query;
                 this._cancelDebounce();
+                this._nextPageUrl = null;
+                this._isLoadingMore = false;
             }
 
             const requestId = ++this._requestId;
@@ -573,7 +575,6 @@
             this._mentionSpan = null;
             this._mentionCounter = 0;
             this._suppressNextInput = false;
-            this._skipNextContentEditableInput = false;
 
             this._h = {};
             this._a11yOriginal = {};
@@ -847,11 +848,6 @@
         }
 
         async _onContentEditableInput() {
-            if (this._skipNextContentEditableInput) {
-                this._skipNextContentEditableInput = false;
-                return;
-            }
-
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
@@ -1055,7 +1051,6 @@
                 this._invalidateMentionMetadata(span);
                 if (!isActive) span.classList.add('active');
                 this._mentionSpan = span;
-                this._skipNextContentEditableInput = true;
                 const items = await this._search(newText.substring(this._opts.trigger.length));
                 if (items === null) return;
                 if (this._inDOM(span)) this._openDropdown(items);
@@ -1288,28 +1283,16 @@
 
         _canInsertMentionHere(sel) {
             if (!sel || sel.rangeCount === 0) return true;
-            const range = sel.getRangeAt(0);
-            const { startContainer: container, startOffset: offset } = range;
 
-            const charBefore = (() => {
-                if (container.nodeType === Node.TEXT_NODE) {
-                    if (offset > 0) return container.textContent[offset - 1];
-                    const prev = container.previousSibling;
-                    if (!prev) return null;
-                    if (prev.nodeType === Node.TEXT_NODE) return prev.textContent.slice(-1);
-                    return this._findEdgeTextNode(prev, true)?.textContent?.slice(-1) ?? null;
-                }
-                if (container.nodeType === Node.ELEMENT_NODE) {
-                    if (offset === 0) return null;
-                    const prev = container.childNodes[offset - 1];
-                    if (!prev) return null;
-                    if (prev.nodeType === Node.TEXT_NODE) return prev.textContent.slice(-1);
-                    return this._findEdgeTextNode(prev, true)?.textContent?.slice(-1) ?? null;
-                }
-                return null;
-            })();
+            const caret = sel.getRangeAt(0);
+            const before = document.createRange();
+            before.selectNodeContents(this._el);
+            before.setEnd(caret.startContainer, caret.startOffset);
 
-            return charBefore === null || /[\s\u00A0]/.test(charBefore);
+            const textBeforeCaret = before.toString();
+            const charBefore = textBeforeCaret.slice(-1);
+
+            return charBefore === '' || /[\s\u00A0]/.test(charBefore);
         }
 
         _insertMentionSpan(sel) {
@@ -1422,7 +1405,6 @@
 
         _closeDropdown() {
             this._searchSession.cancel();
-            this._skipNextContentEditableInput = false;
             this._setExpanded(false);
 
             this._unbindDropdownEvents();
@@ -1431,8 +1413,18 @@
             this._ui.destroy();
 
             if (this._mentionSpan) {
-                this._mentionSpan.classList.remove('active');
-                this._mentionSpan.removeAttribute('id');
+                const span = this._mentionSpan;
+                const isCommitted =
+                    span.hasAttribute('data-mention-id') &&
+                    span.hasAttribute('data-mention-name');
+
+                span.classList.remove('active');
+                span.removeAttribute('id');
+
+                if (!isCommitted) {
+                    span.classList.remove('mention');
+                    delete span.dataset.mentionjsToken;
+                }
             }
 
             this._mentionStart = null;

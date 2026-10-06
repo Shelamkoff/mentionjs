@@ -770,3 +770,182 @@ describe('MentionJS option and rich-text boundaries', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS second-pass regressions', () => {
+    it('releases an unfinished contenteditable token when search is cancelled', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(editor.querySelector('span.mention.active')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(editor.textContent).toBe('@');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.querySelector('[data-mentionjs-token]')).toBeNull();
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('uses the actual contenteditable DOM after replacing a selection inside a mention', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+        const text = span.firstChild;
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(text, 1);
+        range.setEnd(text, 4);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        beforeInput(editor, 'insertText', 'B');
+
+        text.textContent = '@Bce';
+        setCaret(text, 2);
+        input(editor);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('Bce', null);
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(searchFunction).not.toHaveBeenCalledWith('BAlice', null);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('allows pagination for a new query even while an older page request is unresolved', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveOldPage;
+        const oldPage = new Promise((resolve) => {
+            resolveOldPage = resolve;
+        });
+
+        const searchFunction = vi.fn((query, nextPageUrl) => {
+            if (nextPageUrl === '/old') return oldPage;
+            if (nextPageUrl === '/new') {
+                return Promise.resolve({
+                    items: [{ id: 5, name: 'New Three' }],
+                    nextPageUrl: null,
+                });
+            }
+            if (query === 'n') {
+                return Promise.resolve({
+                    items: [
+                        { id: 3, name: 'New One' },
+                        { id: 4, name: 'New Two' },
+                    ],
+                    nextPageUrl: '/new',
+                });
+            }
+            return Promise.resolve({
+                items: [
+                    { id: 1, name: 'Old One' },
+                    { id: 2, name: 'Old Two' },
+                ],
+                nextPageUrl: '/old',
+            });
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]').length).toBe(2);
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', '/old');
+        });
+
+        textarea.value = '@n';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('n', null);
+            expect(document.querySelector('.mention-name')?.textContent).toBe('New One');
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('n', '/new');
+        });
+
+        resolveOldPage({
+            items: [{ id: 6, name: 'Old Three' }],
+            nextPageUrl: null,
+        });
+
+        mention.destroy();
+    });
+
+    it('does not start a mention at the start of a formatted node when text before it is non-whitespace', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<em>x</em><strong>abc</strong>';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+
+        const strongText = editor.querySelector('strong').firstChild;
+        setCaret(strongText, 0);
+
+        const event = beforeInput(editor, 'insertText', '@');
+        await Promise.resolve();
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(searchFunction).not.toHaveBeenCalled();
+        expect(editor.querySelector('span.mention')).toBeNull();
+
+        mention.destroy();
+    });
+});
