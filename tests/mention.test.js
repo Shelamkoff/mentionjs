@@ -2862,3 +2862,65 @@ describe('MentionJS framework-controlled textarea commit', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS detached host lifecycle', () => {
+    it('does not open an orphan textarea dropdown after the host is removed', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveSearch;
+        const mention = new MentionJS(textarea, {
+            searchFunction: () => new Promise((resolve) => {
+                resolveSearch = resolve;
+            }),
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        expect(typeof resolveSearch).toBe('function');
+
+        textarea.remove();
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+
+        mention.destroy();
+    });
+
+    it('does not open an orphan contenteditable dropdown after the host is removed', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        let resolveSearch;
+        const mention = new MentionJS(editor, {
+            searchFunction: () => new Promise((resolve) => {
+                resolveSearch = resolve;
+            }),
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        expect(typeof resolveSearch).toBe('function');
+
+        editor.remove();
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+
+        mention.destroy();
+    });
+});

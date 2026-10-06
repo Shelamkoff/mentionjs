@@ -1799,6 +1799,11 @@
         }
 
         _openDropdown(items) {
+            if (!this._el.isConnected) {
+                this._closeDropdown();
+                return;
+            }
+
             const isNew = !this._ui.el;
             if (isNew) {
                 this._ui.mount(this._isTextarea ? 'textarea' : 'contenteditable');
