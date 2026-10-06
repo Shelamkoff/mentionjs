@@ -606,6 +606,7 @@
             });
 
             this._mentions.push(mention);
+            this._mentions.sort((a, b) => a.start - b.start);
         }
 
         acknowledge(value) {

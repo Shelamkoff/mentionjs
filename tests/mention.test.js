@@ -3330,3 +3330,53 @@ describe('MentionJS Shadow DOM textarea focus semantics', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS textarea mention ordering', () => {
+    it('returns programmatically inserted mentions in document order', () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = 'middle';
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        mention.push({ id: 2, name: 'Right' });
+
+        textarea.setSelectionRange(0, 0);
+        mention.push({ id: 1, name: 'Left' });
+
+        const mentions = mention.getMentions();
+        expect(mentions.map((item) => item.id)).toEqual([1, 2]);
+        expect(mentions[0].start).toBeLessThan(mentions[1].start);
+        expect(textarea.value.slice(mentions[0].start, mentions[0].end))
+            .toBe('@Left');
+        expect(textarea.value.slice(mentions[1].start, mentions[1].end))
+            .toBe('@Right');
+
+        mention.destroy();
+    });
+
+    it('keeps document ordering after edits before multiple mentions', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+
+        mention.push({ id: 1, name: 'Alice' });
+        mention.push({ id: 2, name: 'Bob' });
+
+        textarea.focus();
+        textarea.setSelectionRange(0, 0);
+        beforeInput(textarea, 'insertText', 'X');
+        textarea.value = 'X' + textarea.value;
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        const mentions = mention.getMentions();
+        expect(mentions.map((item) => item.id)).toEqual([1, 2]);
+        expect(mentions[0].start).toBeLessThan(mentions[1].start);
+
+        mention.destroy();
+    });
+});
