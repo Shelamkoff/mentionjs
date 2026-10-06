@@ -1037,7 +1037,7 @@
             }
 
             if (e.data === this._opts.trigger) {
-                if (!this._canInsertMentionHere(sel)) return;
+                if (!this._canInsertMentionHere(sel) || !e.cancelable) return;
                 e.preventDefault();
                 const newSpan = this._insertMentionSpan(sel);
                 this._mentionSpan = newSpan;
@@ -1130,6 +1130,7 @@
                     e.data.length > 0;
 
                 if (manuallyInsertedText) {
+                    if (!e.cancelable) return;
                     e.preventDefault();
                     const tn = document.createTextNode(e.data);
                     span.parentNode.insertBefore(tn, span);
@@ -1139,6 +1140,7 @@
                 }
 
                 if (e.inputType === 'deleteContentBackward') {
+                    if (!e.cancelable) return;
                     e.preventDefault();
                     if (this._backspaceBeforeSpan(span, sel)) {
                         this._dispatchContentEditableInput(e.inputType);
@@ -1147,6 +1149,7 @@
                 }
 
                 if (e.inputType === 'deleteContentForward') {
+                    if (!e.cancelable) return;
                     e.preventDefault();
                     if (this._deleteForwardInSpan(span, spanText)) {
                         this._dispatchContentEditableInput(e.inputType);
@@ -1165,6 +1168,7 @@
                     typeof e.data === 'string' &&
                     e.data.length > 0
                 ) {
+                    if (!e.cancelable) return;
                     e.preventDefault();
                     const next = span.nextSibling;
                     if (next?.nodeType === Node.TEXT_NODE) {
@@ -1180,6 +1184,7 @@
                     return;
                 }
                 if (e.inputType === 'deleteContentForward') {
+                    if (!e.cancelable) return;
                     e.preventDefault();
                     if (this._deleteForwardAfterNode(span)) {
                         this._dispatchContentEditableInput(e.inputType);
@@ -1189,6 +1194,7 @@
             }
 
             if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+                if (!e.cancelable) return;
                 e.preventDefault();
                 if (isActive && this._searchSession.items.length > 0) return;
 
@@ -1202,6 +1208,7 @@
             }
 
             if (e.inputType === 'deleteContentBackward') {
+                if (!e.cancelable) return;
                 const offset = cursorInText ?? spanText.length;
 
                 if (spanText === this._opts.trigger) {
@@ -1268,6 +1275,7 @@
             }
 
             if (e.inputType === 'deleteContentForward') {
+                if (!e.cancelable) return;
                 const offset = cursorInText ?? spanText.length;
 
                 // At end of span → delete next sibling content.

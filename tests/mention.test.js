@@ -3064,3 +3064,88 @@ describe('MentionJS contenteditable attribute semantics', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS non-cancelable beforeinput safety', () => {
+    function nonCancelableBeforeInput(element, inputType, data = null) {
+        const event = new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: false,
+            inputType,
+            data,
+        });
+        element.dispatchEvent(event);
+        return event;
+    }
+
+    it('does not manually duplicate a non-cancelable trigger insertion', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+
+        editor.focus();
+        setCaret(editor, 0);
+        const event = nonCancelableBeforeInput(editor, 'insertText', '@');
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(editor.textContent).toBe('');
+        expect(editor.querySelector('span.mention')).toBeNull();
+
+        editor.appendChild(document.createTextNode('@'));
+        setCaret(editor.firstChild, 1);
+        input(editor);
+
+        expect(editor.textContent).toBe('@');
+        expect(editor.querySelectorAll('span')).toHaveLength(0);
+
+        mention.destroy();
+    });
+
+    it('does not manually delete content for a non-cancelable backward edit', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span.firstChild, span.textContent.length);
+        const event = nonCancelableBeforeInput(
+            editor,
+            'deleteContentBackward'
+        );
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(span.textContent).toBe('@Alice');
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+
+        span.firstChild.textContent = '@Alic';
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+
+        expect(span.textContent).toBe('@Alic');
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+
+    it('does not manually insert a line break for non-cancelable beforeinput', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span.firstChild, 2);
+        const event = nonCancelableBeforeInput(editor, 'insertParagraph');
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(editor.querySelector('br')).toBeNull();
+
+        mention.destroy();
+    });
+});
