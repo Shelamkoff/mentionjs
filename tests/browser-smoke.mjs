@@ -4,6 +4,11 @@ import { pathToFileURL } from 'node:url';
 
 const DRIVER_URL = 'http://127.0.0.1:9515';
 const ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
+const BROWSER = process.env.BROWSER || 'chrome';
+
+if (!['chrome', 'firefox'].includes(BROWSER)) {
+    throw new Error(`Unsupported browser: ${BROWSER}`);
+}
 
 function assert(condition, message) {
     if (!condition) throw new Error(message);
@@ -52,9 +57,13 @@ async function waitFor(exec, predicate, message, timeoutMs = 5000) {
     throw new Error(`${message}; last value: ${JSON.stringify(last)}`);
 }
 
-const driver = spawn('chromedriver', ['--port=9515'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-});
+const driver = BROWSER === 'firefox'
+    ? spawn('geckodriver', ['--port', '9515'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    : spawn('chromedriver', ['--port=9515'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
 let driverOutput = '';
 driver.stdout.on('data', (chunk) => { driverOutput += chunk.toString(); });
@@ -65,21 +74,28 @@ let sessionId = null;
 try {
     await waitForDriver();
 
-    const session = await request('/session', 'POST', {
-        capabilities: {
-            alwaysMatch: {
-                browserName: 'chrome',
-                'goog:chromeOptions': {
-                    args: [
-                        '--headless=new',
-                        '--no-sandbox',
-                        '--disable-gpu',
-                        '--disable-dev-shm-usage',
-                        '--allow-file-access-from-files',
-                    ],
-                },
+    const alwaysMatch = BROWSER === 'firefox'
+        ? {
+            browserName: 'firefox',
+            'moz:firefoxOptions': {
+                args: ['-headless'],
             },
-        },
+        }
+        : {
+            browserName: 'chrome',
+            'goog:chromeOptions': {
+                args: [
+                    '--headless=new',
+                    '--no-sandbox',
+                    '--disable-gpu',
+                    '--disable-dev-shm-usage',
+                    '--allow-file-access-from-files',
+                ],
+            },
+        };
+
+    const session = await request('/session', 'POST', {
+        capabilities: { alwaysMatch },
     });
     sessionId = session.sessionId;
 
@@ -387,7 +403,7 @@ try {
     await assertEditableMentionConsistency('redo');
 
     await execute('window.__browserSmokePassed = true; return true;');
-    console.log('MentionJS Chromium smoke tests passed');
+    console.log(`MentionJS ${BROWSER} smoke tests passed`);
 } catch (error) {
     console.error(error);
     console.error(driverOutput);
