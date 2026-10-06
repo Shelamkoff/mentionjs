@@ -290,7 +290,7 @@ try {
     assert(backspace.text === '' && !backspace.span,
         'Backspace did not remove trigger-only token cleanly');
 
-    window.__browserSmokePassed = true;
+    await execute('window.__browserSmokePassed = true; return true;');
     console.log('MentionJS Chromium smoke tests passed');
 } catch (error) {
     console.error(error);
