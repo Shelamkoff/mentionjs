@@ -2040,3 +2040,52 @@ describe('MentionJS search item validation', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS editing-host and preloaded mention ownership', () => {
+    it('rejects a descendant that merely inherits contenteditable from an ancestor', () => {
+        const host = document.createElement('div');
+        host.setAttribute('contenteditable', 'true');
+        const child = document.createElement('span');
+        host.appendChild(child);
+        document.body.appendChild(host);
+
+        expect(() => new MentionJS(child)).toThrow(/editing host/);
+    });
+
+    it('keeps a preloaded mention owned while it is edited', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML =
+            '<span class="mention" data-mention-id="7" data-mention-name="Alice">@Alice</span>';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, span.textContent.length);
+        const event = beforeInput(editor, 'insertText', 'x');
+
+        expect(event.defaultPrevented).toBe(false);
+
+        // Simulate the browser mutation after beforeinput.
+        span.firstChild.textContent = '@Alicex';
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('Alicex', null);
+        });
+
+        expect(span.dataset.mentionjsToken).toBe('true');
+        expect(span.classList.contains('mention')).toBe(true);
+        expect(span.classList.contains('active')).toBe(true);
+        expect(mention.getMentions()).toEqual([]);
+
+        mention.destroy();
+    });
+});

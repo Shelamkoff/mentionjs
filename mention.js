@@ -631,7 +631,7 @@
             const tagName = element.tagName.toLowerCase();
             const contentEditable = element.getAttribute('contenteditable');
             const isTextarea = tagName === 'textarea';
-            const isContentEditable = element.isContentEditable ||
+            const isContentEditable =
                 contentEditable === '' ||
                 contentEditable === 'true' ||
                 contentEditable === 'plaintext-only';
@@ -1492,6 +1492,7 @@
         }
 
         _invalidateMentionMetadata(span) {
+            span.dataset.mentionjsToken = 'true';
             delete span.dataset.mentionId;
             delete span.dataset.mentionName;
         }
