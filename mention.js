@@ -987,7 +987,7 @@
                     this._closeDropdown();
                     return;
                 }
-                if (this._inDOM(newSpan)) this._openDropdown(items);
+                this._openDropdownForSpan(items, newSpan);
             } else {
                 this._closeDropdown();
             }
@@ -1202,7 +1202,7 @@
                     this._closeDropdown();
                     return;
                 }
-                if (this._inDOM(span)) this._openDropdown(items);
+                this._openDropdownForSpan(items, span);
                 return;
             }
 
@@ -1275,7 +1275,7 @@
                     this._closeDropdown();
                     return;
                 }
-                if (this._inDOM(span)) this._openDropdown(items);
+                this._openDropdownForSpan(items, span);
                 return;
             }
 
@@ -1295,7 +1295,7 @@
                     this._closeDropdown();
                     return;
                 }
-                if (this._inDOM(span)) this._openDropdown(items);
+                this._openDropdownForSpan(items, span);
             }
         }
 
@@ -1664,7 +1664,7 @@
                         this._closeDropdown();
                         return;
                     }
-                    if (this._inDOM(prev)) this._openDropdown(items);
+                    this._openDropdownForSpan(items, prev);
                 });
                 return false;
             }
@@ -1736,6 +1736,14 @@
             if (triggerEnd + query.length !== position) return null;
 
             return { start: triggerIdx, end: position, query };
+        }
+
+        _openDropdownForSpan(items, span) {
+            if (!this._inDOM(span) || this._mentionSpan !== span) {
+                this._closeDropdown();
+                return;
+            }
+            this._openDropdown(items);
         }
 
         _openDropdown(items) {

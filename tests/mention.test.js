@@ -2192,3 +2192,64 @@ describe('MentionJS pending selection lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS framework-controlled DOM lifecycle', () => {
+    it('cleans up when an external input listener removes a just-created token', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        editor.addEventListener('input', () => {
+            editor.querySelector('span.mention')?.remove();
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(mention._mentionSpan).toBeNull();
+        expect(mention._h.selectionChange).toBeNull();
+
+        mention.destroy();
+    });
+
+    it('cleans up when an active token is removed while its search is pending', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        let resolveSearch;
+        const mention = new MentionJS(editor, {
+            searchFunction: () => new Promise((resolve) => {
+                resolveSearch = resolve;
+            }),
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        const span = editor.querySelector('span.mention');
+        span.remove();
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(mention._mentionSpan).toBeNull();
+        expect(mention._h.selectionChange).toBeNull();
+
+        mention.destroy();
+    });
+});
