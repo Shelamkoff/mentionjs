@@ -2423,3 +2423,31 @@ describe('MentionJS stale selectable results during debounce', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS trigger-only deletion cleanup', () => {
+    it('removes a default trigger-only token completely', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, 1);
+        const deletion = beforeInput(editor, 'deleteContentBackward');
+
+        expect(deletion.defaultPrevented).toBe(true);
+        expect(editor.textContent).toBe('');
+        expect(editor.querySelector('span')).toBeNull();
+        expect(mention._mentionSpan).toBeNull();
+
+        mention.destroy();
+    });
+});

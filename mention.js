@@ -1153,10 +1153,11 @@
 
                 if (spanText === this._opts.trigger) {
                     e.preventDefault();
-                    this._closeDropdown();
                     const prev = span.previousSibling;
                     const next = span.nextSibling;
                     span.remove();
+                    if (this._mentionSpan === span) this._mentionSpan = null;
+                    this._closeDropdown();
 
                     const range = document.createRange();
                     if (prev?.nodeType === Node.TEXT_NODE) range.setStart(prev, prev.textContent.length);
