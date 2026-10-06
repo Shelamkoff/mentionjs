@@ -404,3 +404,287 @@ describe('MentionJS caret lifecycle', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS preserved feature behavior', () => {
+    it('debounces non-empty searches and cancels the superseded query before execution', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 20,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('ab', null);
+        });
+
+        expect(searchFunction).not.toHaveBeenCalledWith('a', null);
+        mention.destroy();
+    });
+
+    it('ignores a stale async response after a newer query has completed', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let resolveInitial;
+        const initial = new Promise((resolve) => {
+            resolveInitial = resolve;
+        });
+        const searchFunction = vi.fn((query) => {
+            if (query === '') return initial;
+            return Promise.resolve([{ id: 2, name: 'Fast' }]);
+        });
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        textarea.value = '@f';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent).toBe('Fast');
+        });
+
+        resolveInitial([{ id: 1, name: 'Stale' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-name')?.textContent).toBe('Fast');
+        mention.destroy();
+    });
+
+    it('loads the next result page when keyboard selection approaches the end', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn(async (query, nextPageUrl) => {
+            if (nextPageUrl) {
+                return {
+                    items: [{ id: 3, name: 'Charlie' }],
+                    nextPageUrl: null,
+                };
+            }
+            return {
+                items: [
+                    { id: 1, name: 'Alice' },
+                    { id: 2, name: 'Bob' },
+                ],
+                nextPageUrl: '/next',
+            };
+        });
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelectorAll('.mention-item[data-index]').length).toBe(2);
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', '/next');
+            expect(document.querySelectorAll('.mention-item[data-index]').length).toBe(3);
+        });
+
+        mention.destroy();
+    });
+
+    it('keeps custom single-character triggers behavior identical to the default trigger', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            trigger: '#',
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '#topic';
+        textarea.setSelectionRange(6, 6);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('topic', null);
+        });
+
+        mention.destroy();
+    });
+
+    it('does not start textarea search when the trigger is embedded in a word', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = 'mail@alice';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(searchFunction).not.toHaveBeenCalled();
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('inserts push() at the active contenteditable caret instead of appending to the end', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.textContent = 'hello world';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+
+        editor.focus();
+        setCaret(editor.firstChild, 6);
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(editor.textContent).toBe('hello @Bob\u00A0world');
+        expect(mention.getMentions()).toEqual([{ id: '2', name: 'Bob' }]);
+
+        const selection = window.getSelection();
+        expect(selection.anchorNode.nodeType).toBe(Node.TEXT_NODE);
+        expect(selection.anchorNode.textContent).toBe('\u00A0');
+        expect(selection.anchorOffset).toBe(1);
+        mention.destroy();
+    });
+
+    it('places the caret after the trailing space when a textarea mention is committed', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('@Alice ');
+        expect(textarea.selectionStart).toBe(7);
+        expect(textarea.selectionEnd).toBe(7);
+        mention.destroy();
+    });
+
+    it('places the caret after the trailing non-breaking space when a contenteditable mention is committed', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        editor.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }));
+
+        const selection = window.getSelection();
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+        expect(selection.anchorNode.nodeType).toBe(Node.TEXT_NODE);
+        expect(selection.anchorNode.textContent).toBe('\u00A0');
+        expect(selection.anchorOffset).toBe(1);
+        mention.destroy();
+    });
+
+    it('clear resets content, committed mentions, dropdown, and accessibility state', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+
+        mention.push({ id: 2, name: 'Bob' });
+        textarea.focus();
+        textarea.value += '@';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+        });
+
+        mention.clear();
+
+        expect(textarea.value).toBe('');
+        expect(mention.getMentions()).toEqual([]);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+        mention.destroy();
+    });
+
+    it('destroy removes behavior listeners and restores host accessibility attributes', async () => {
+        const textarea = document.createElement('textarea');
+        textarea.setAttribute('role', 'textbox');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        expect(textarea.getAttribute('role')).toBe('textbox');
+        expect(textarea.getAttribute('aria-autocomplete')).toBe('list');
+
+        mention.destroy();
+
+        expect(textarea.getAttribute('role')).toBe('textbox');
+        expect(textarea.hasAttribute('aria-autocomplete')).toBe(false);
+        expect(textarea.hasAttribute('aria-controls')).toBe(false);
+        expect(textarea.hasAttribute('aria-expanded')).toBe(false);
+
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await Promise.resolve();
+
+        expect(searchFunction).not.toHaveBeenCalled();
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+    });
+});
