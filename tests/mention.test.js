@@ -1482,3 +1482,82 @@ describe('MentionJS selections inside mentions', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS outside-click and connected DOM lifecycle', () => {
+    it('cancels a pending search on an outside click before the dropdown opens', async () => {
+        const textarea = document.createElement('textarea');
+        const outside = document.createElement('div');
+        document.body.append(textarea, outside);
+
+        let resolveSearch;
+        const searchFunction = vi.fn(() => new Promise((resolve) => {
+            resolveSearch = resolve;
+        }));
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        outside.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            composed: true,
+        }));
+
+        resolveSearch([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('treats connected nodes inside a shadow root as part of the live DOM', () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const textarea = document.createElement('textarea');
+        shadow.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        const child = document.createElement('span');
+        textarea.after(child);
+
+        expect(child.isConnected).toBe(true);
+        expect(mention._inDOM(child)).toBe(true);
+
+        mention.destroy();
+    });
+
+    it('does not interpret a composed click inside a shadow-hosted editor as an outside click', () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+        const textarea = document.createElement('textarea');
+        shadow.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        mention._mentionStart = 0;
+        mention._mentionEnd = 1;
+        mention._openDropdown([{ id: 1, name: 'Alice' }]);
+
+        textarea.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            composed: true,
+        }));
+
+        expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+
+        document.body.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            composed: true,
+        }));
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+});

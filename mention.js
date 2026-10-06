@@ -690,11 +690,22 @@
 
         _bindDocumentClick() {
             this._h.docClick = (e) => {
-                if (!this._ui.el) return;
-                const outside = !this._el.contains(e.target) &&
-                    !this._ui.el.contains(e.target) &&
-                    e.target !== this._el;
-                if (outside) this._closeDropdown();
+                const hasActiveSearch =
+                    !!this._ui.el ||
+                    this._mentionStart !== null ||
+                    !!this._mentionSpan;
+                if (!hasActiveSearch) return;
+
+                const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+                const insideEditor =
+                    path.includes(this._el) ||
+                    this._el.contains(e.target) ||
+                    e.target === this._el;
+                const insideDropdown =
+                    !!this._ui.el &&
+                    (path.includes(this._ui.el) || this._ui.el.contains(e.target));
+
+                if (!insideEditor && !insideDropdown) this._closeDropdown();
             };
             document.addEventListener('click', this._h.docClick);
         }
@@ -1713,7 +1724,7 @@
         }
 
         _inDOM(el) {
-            return !!el && document.contains(el);
+            return !!el && el.isConnected;
         }
 
         /**
