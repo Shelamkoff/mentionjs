@@ -435,10 +435,32 @@
 
             if (requestId !== this._requestId) return null;
 
-            const items = raw?.items ?? (Array.isArray(raw) ? raw : []);
-            const next = raw?.nextPageUrl ?? null;
+            const isArrayResult = Array.isArray(raw);
+            const isObjectResult =
+                raw !== null &&
+                typeof raw === 'object' &&
+                !isArrayResult &&
+                Object.prototype.hasOwnProperty.call(raw, 'items');
 
-            if (!Array.isArray(items) || (next !== null && typeof next !== 'string')) {
+            if (!isArrayResult && !isObjectResult) {
+                console.warn('MentionJS: searchFunction returned an invalid result', raw);
+                return SEARCH_FAILED;
+            }
+
+            const items = isArrayResult ? raw : raw.items;
+            const next = isArrayResult ? null : (raw.nextPageUrl ?? null);
+            const validItems =
+                Array.isArray(items) &&
+                items.every((item) => (
+                    item !== null &&
+                    typeof item === 'object' &&
+                    (typeof item.id === 'string' || typeof item.id === 'number') &&
+                    typeof item.name === 'string' &&
+                    (item.avatar === undefined || typeof item.avatar === 'string') &&
+                    (item.details === undefined || typeof item.details === 'string')
+                ));
+
+            if (!validItems || (next !== null && typeof next !== 'string')) {
                 console.warn('MentionJS: searchFunction returned an invalid result', raw);
                 return SEARCH_FAILED;
             }

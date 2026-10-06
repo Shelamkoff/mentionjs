@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MentionModule from '../mention.js';
 
@@ -1670,7 +1671,10 @@ describe('MentionJS separator and stylesheet isolation', () => {
         foreignMention.className = 'mention active';
         document.body.append(foreignItem, foreignMention);
 
-        const sheetText = "/*!\n * MentionJS v1.0.0 — Default Stylesheet\n * Import this file alongside mention.js\n */\n\n/* ── Dropdown container ─────────────────────────────────────────────────── */\n.mention-dropdown[data-mention-type] {\n    position: absolute;\n    background: #ffffff;\n    border: 2px solid #1976d2;\n    border-radius: 8px;\n    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);\n    max-height: 240px;\n    overflow-y: auto;\n    overflow-x: hidden;\n    z-index: 9999;\n    min-width: 220px;\n    max-width: calc(100vw - 20px);\n    box-sizing: border-box;\n    font-family: inherit;\n\n    /* Hidden by default — toggled via .active */\n    opacity: 0;\n    transform: translateY(-6px);\n    visibility: hidden;\n    transition: opacity 0.15s ease, transform 0.15s ease;\n    pointer-events: none;\n}\n\n.mention-dropdown[data-mention-type].active {\n    opacity: 1;\n    transform: translateY(0);\n    visibility: visible;\n    pointer-events: auto;\n}\n\n/* Thin scrollbar */\n.mention-dropdown[data-mention-type]::-webkit-scrollbar { width: 4px; }\n.mention-dropdown[data-mention-type]::-webkit-scrollbar-track { background: transparent; }\n.mention-dropdown[data-mention-type]::-webkit-scrollbar-thumb { background: #c5d0de; border-radius: 4px; }\n\n/* ── Dropdown items ─────────────────────────────────────────────────────── */\n.mention-dropdown[data-mention-type] .mention-item {\n    display: flex;\n    align-items: center;\n    gap: 10px;\n    padding: 10px 14px;\n    cursor: pointer;\n    border-bottom: 1px solid #f0f2f5;\n    transition: background-color 0.1s;\n    user-select: none;\n}\n\n.mention-dropdown[data-mention-type] .mention-item:last-child {\n    border-bottom: none;\n}\n\n.mention-dropdown[data-mention-type] .mention-item:hover,\n.mention-dropdown[data-mention-type] .mention-item.mention-active {\n    background-color: #e3f2fd;\n}\n\n.mention-dropdown[data-mention-type] .mention-item.mention-no-results {\n    cursor: default;\n    color: #888;\n}\n\n.mention-dropdown[data-mention-type] .mention-item.mention-no-results:hover {\n    background-color: transparent;\n}\n\n/* ── Avatar ─────────────────────────────────────────────────────────────── */\n.mention-dropdown[data-mention-type] .mention-avatar {\n    width: 32px;\n    height: 32px;\n    border-radius: 50%;\n    object-fit: cover;\n    flex-shrink: 0;\n}\n\n.mention-dropdown[data-mention-type] .mention-avatar-placeholder {\n    width: 32px;\n    height: 32px;\n    border-radius: 50%;\n    background: #1976d2;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    color: #ffffff;\n    font-weight: 600;\n    font-size: 13px;\n    flex-shrink: 0;\n}\n\n/* ── Item text ──────────────────────────────────────────────────────────── */\n.mention-dropdown[data-mention-type] .mention-info {\n    flex: 1;\n    min-width: 0;\n}\n\n.mention-dropdown[data-mention-type] .mention-name {\n    font-weight: 500;\n    font-size: 14px;\n    color: #1a1a2e;\n    white-space: nowrap;\n    overflow: hidden;\n    text-overflow: ellipsis;\n}\n\n.mention-dropdown[data-mention-type] .mention-details {\n    font-size: 12px;\n    color: #6b7280;\n    white-space: nowrap;\n    overflow: hidden;\n    text-overflow: ellipsis;\n    margin-top: 1px;\n}\n\n/* ── Loading row ────────────────────────────────────────────────────────── */\n.mention-dropdown[data-mention-type] .mention-loading .mention-item {\n    color: #888;\n    font-size: 13px;\n    cursor: default;\n    justify-content: center;\n}\n\n.mention-dropdown[data-mention-type] .mention-loading .mention-item:hover {\n    background-color: transparent;\n}\n\n/* ── Mention spans inside contenteditable ───────────────────────────────── */\nspan.mention[data-mentionjs-token=\"true\"],\nspan.mention[data-mention-id][data-mention-name] {\n    color: #1976d2;\n    font-weight: 500;\n    border-radius: 3px;\n    padding: 0 1px;\n    cursor: pointer;\n    text-decoration: none;\n}\n\nspan.mention.active[data-mentionjs-token=\"true\"],\nspan.mention.active[data-mention-id][data-mention-name] {\n    background-color: #e3f2fd;\n    outline: none;\n}\n";
+        const sheetText = readFileSync(
+            new URL('../mention.css', import.meta.url),
+            'utf8'
+        );
 
         expect(sheetText).not.toMatch(/^\.mention-item\s*\{/m);
         expect(sheetText).not.toMatch(/^\.mention\s*\{/m);
@@ -1955,6 +1959,84 @@ describe('MentionJS Unicode boundaries around mentions', () => {
         expect(spacer.textContent).toBe('B');
         expect(editor.textContent.includes('\uFFFD')).toBe(false);
 
+        mention.destroy();
+    });
+});
+
+
+describe('MentionJS search item validation', () => {
+    it('rejects result items without a valid id', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ name: 'Missing Id' }],
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: searchFunction returned an invalid result',
+                expect.anything()
+            );
+        });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('rejects result items without a string name', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 42 }],
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: searchFunction returned an invalid result',
+                expect.anything()
+            );
+        });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('rejects objects that omit the required items array', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => ({ nextPageUrl: null }),
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: searchFunction returned an invalid result',
+                expect.anything()
+            );
+        });
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
         mention.destroy();
     });
 });
