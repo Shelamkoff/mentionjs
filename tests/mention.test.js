@@ -1913,3 +1913,48 @@ describe('MentionJS Unicode grapheme behavior', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS Unicode boundaries around mentions', () => {
+    it('backspace before a mention removes a whole emoji from adjacent rich text', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<strong>A😊</strong>';
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        editor.focus();
+        setCaret(editor, editor.childNodes.length);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, 0);
+        beforeInput(editor, 'deleteContentBackward');
+
+        expect(editor.querySelector('strong').textContent).toBe('A');
+        expect(editor.textContent.includes('\uFFFD')).toBe(false);
+
+        mention.destroy();
+    });
+
+    it('forward delete after a mention removes a whole emoji from adjacent text', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        const spacer = span.nextSibling;
+        spacer.textContent = '😊B';
+
+        setCaret(span.firstChild, span.textContent.length);
+        beforeInput(editor, 'deleteContentForward');
+
+        expect(spacer.textContent).toBe('B');
+        expect(editor.textContent.includes('\uFFFD')).toBe(false);
+
+        mention.destroy();
+    });
+});

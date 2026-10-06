@@ -130,10 +130,6 @@
         sel.addRange(range);
     }
 
-    function removeCharAt(str, index) {
-        return str.substring(0, index) + str.substring(index + 1);
-    }
-
     class DropdownUI {
         constructor(options, id) {
             this._options = options;
@@ -1521,12 +1517,14 @@
         _deleteEdgeCharacter(node, fromEnd) {
             const textNode = this._findEdgeTextNode(node, fromEnd);
             if (textNode && textNode.textContent.length > 0) {
-                textNode.textContent = fromEnd
-                    ? textNode.textContent.slice(0, -1)
-                    : textNode.textContent.substring(1);
+                const text = textNode.textContent;
+                const removal = fromEnd
+                    ? removeGraphemeBefore(text, text.length)
+                    : removeGraphemeAt(text, 0);
 
+                textNode.textContent = removal.text;
                 if (textNode.textContent.length === 0) textNode.remove();
-                return true;
+                return removal.text !== text;
             }
 
             if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
