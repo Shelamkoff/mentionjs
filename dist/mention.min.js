@@ -28,6 +28,7 @@
     };
 
     let instanceCounter = 0;
+    const SEARCH_CANCELLED = Symbol('MentionJS search cancelled');
 
     function createElement(tag, className) {
         const el = document.createElement(tag);
@@ -354,7 +355,7 @@
                     raw = await execute();
                 }
             } catch (err) {
-                if (err?.message === 'cancelled') return null;
+                if (err === SEARCH_CANCELLED) return null;
                 console.warn('MentionJS: search failed', err);
                 return null;
             }
@@ -378,7 +379,7 @@
 
         _cancelDebounce() {
             if (this._debounceReject) {
-                this._debounceReject(new Error('cancelled'));
+                this._debounceReject(SEARCH_CANCELLED);
                 this._debounceReject = null;
             }
             if (this._debounceTimer) {
@@ -538,6 +539,23 @@
             }
 
             this._opts = Object.assign({}, DEFAULTS, options);
+
+            if (
+                typeof this._opts.trigger !== 'string' ||
+                this._opts.trigger.length !== 1 ||
+                /\s/.test(this._opts.trigger)
+            ) {
+                throw new Error('MentionJS: trigger must be exactly one non-whitespace character');
+            }
+
+            if (
+                typeof this._opts.debounceDelay !== 'number' ||
+                !Number.isFinite(this._opts.debounceDelay) ||
+                this._opts.debounceDelay < 0
+            ) {
+                throw new Error('MentionJS: debounceDelay must be a non-negative finite number');
+            }
+
             this._el = element;
             this._isTextarea = isTextarea;
             this._instanceId = ++instanceCounter;
@@ -1279,14 +1297,14 @@
                     const prev = container.previousSibling;
                     if (!prev) return null;
                     if (prev.nodeType === Node.TEXT_NODE) return prev.textContent.slice(-1);
-                    return null;
+                    return this._findEdgeTextNode(prev, true)?.textContent?.slice(-1) ?? null;
                 }
                 if (container.nodeType === Node.ELEMENT_NODE) {
                     if (offset === 0) return null;
                     const prev = container.childNodes[offset - 1];
                     if (!prev) return null;
                     if (prev.nodeType === Node.TEXT_NODE) return prev.textContent.slice(-1);
-                    return null;
+                    return this._findEdgeTextNode(prev, true)?.textContent?.slice(-1) ?? null;
                 }
                 return null;
             })();

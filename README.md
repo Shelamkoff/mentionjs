@@ -86,7 +86,7 @@ const m = new MentionJS(element, options);
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `trigger` | `string` | `'@'` | Character that opens the dropdown |
+| `trigger` | `string` | `'@'` | Exactly one non-whitespace character that opens the dropdown |
 | `searchFunction` | `SearchFunction` | `null` | Async search function (see below) |
 | `debounceDelay` | `number` | `300` | Debounce delay in ms for non-empty queries |
 | `noResultsText` | `string` | `'No results found'` | Text shown when search returns no items |
@@ -254,9 +254,9 @@ Import `mention.css` for default styles. All classes are customizable:
 
 ## How It Works
 
-**Textarea**: Mentions are tracked as `{ id, name, start, end }` objects. Positions are recalculated on every input via `_syncMentionPositions()`. The mention text is displayed inline as `@Name`.
+**Textarea**: Mentions are tracked as `{ id, name, start, end }` objects. Edit ranges are captured from `beforeinput` and reconciled after `input`, so committed mention identity stays attached to the original range. The mention text is displayed inline as `@Name`.
 
-**ContentEditable**: Each mention is a `<span class="mention">` with `data-mention-id` and `data-mention-name` attributes. Active (in-progress) mentions have the `.active` class. All input inside mention spans is intercepted via the `beforeinput` event for full control over editing behavior.
+**ContentEditable**: Each mention is a `<span class="mention">` with internal ownership metadata plus `data-mention-id` and `data-mention-name`. Active (in-progress) mentions have the `.active` class. Browser-driven input is reconciled after `input`, while operations that need atomic mention behavior are handled through `beforeinput`.
 
 ## Files
 

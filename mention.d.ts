@@ -35,8 +35,10 @@ declare namespace MentionJS {
     type RenderLoadingFunction = () => HTMLElement | null | undefined;
 
     interface MentionJSOptions {
+        /** Exactly one non-whitespace character. */
         trigger?: string;
         searchFunction?: SearchFunction | null;
+        /** Non-negative finite delay in milliseconds. */
         debounceDelay?: number;
         noResultsText?: string;
         dropdownClass?: string;

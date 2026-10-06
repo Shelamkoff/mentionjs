@@ -688,3 +688,85 @@ describe('MentionJS preserved feature behavior', () => {
         expect(document.querySelector('.mention-dropdown')).toBeNull();
     });
 });
+
+
+describe('MentionJS option and rich-text boundaries', () => {
+    it('rejects invalid trigger values instead of partially supporting them', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        expect(() => new MentionJS(textarea, { trigger: '' })).toThrow(/trigger/);
+        expect(() => new MentionJS(textarea, { trigger: '@@' })).toThrow(/trigger/);
+        expect(() => new MentionJS(textarea, { trigger: ' ' })).toThrow(/trigger/);
+        expect(() => new MentionJS(textarea, { trigger: '#' })).not.toThrow();
+    });
+
+    it('rejects invalid debounce delays', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        expect(() => new MentionJS(textarea, { debounceDelay: -1 })).toThrow(/debounceDelay/);
+        expect(() => new MentionJS(textarea, { debounceDelay: Number.NaN })).toThrow(/debounceDelay/);
+    });
+
+    it('does not start contenteditable search directly after formatted non-whitespace text', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<strong>abc</strong>';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+        setCaret(editor, editor.childNodes.length);
+
+        const event = beforeInput(editor, 'insertText', '@');
+        await Promise.resolve();
+
+        expect(event.defaultPrevented).toBe(false);
+        expect(searchFunction).not.toHaveBeenCalled();
+        expect(editor.querySelector('span.mention')).toBeNull();
+        mention.destroy();
+    });
+
+    it('allows contenteditable search after whitespace inside a formatted node', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<strong>abc </strong>';
+        document.body.appendChild(editor);
+
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+        setCaret(editor, editor.childNodes.length);
+
+        const event = beforeInput(editor, 'insertText', '@');
+
+        await vi.waitFor(() => {
+            expect(event.defaultPrevented).toBe(true);
+            expect(searchFunction).toHaveBeenCalledWith('', null);
+        });
+
+        mention.destroy();
+    });
+
+    it('does not confuse a user search error named cancelled with internal cancellation', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const searchFunction = vi.fn().mockRejectedValue(new Error('cancelled'));
+        const mention = new MentionJS(textarea, { searchFunction });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(warning).toHaveBeenCalledWith(
+                'MentionJS: search failed',
+                expect.any(Error)
+            );
+        });
+
+        mention.destroy();
+    });
+});
