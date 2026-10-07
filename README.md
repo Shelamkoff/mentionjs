@@ -1,7 +1,7 @@
 # MentionJS
 
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
-No dependencies. ~9.5 KB gzipped. TypeScript definitions included.
+No dependencies. ~10 KB gzipped. TypeScript definitions included.
 
 **[Live Demo](https://shelamkoff.github.io/mentionjs/demo.html)**
 
@@ -276,7 +276,7 @@ The `dist/` directory is generated and is not stored in Git. It is included in p
 
 ## Browser Support
 
-Requires `beforeinput` event support (all modern browsers). No IE11 support.
+Requires modern `beforeinput`, Selection/Range, and AbortController support. Native CI smoke tests run in current Chrome and Firefox. Safari/WebKit is not part of the automated browser matrix. IE11 is not supported.
 
 ## License
 

@@ -1,7 +1,7 @@
 # MentionJS
 
 @-mention автокомплит для `<textarea>` и `contenteditable`.
-Без зависимостей. ~9,5 КБ gzipped. TypeScript типы в комплекте.
+Без зависимостей. ~10 КБ gzipped. TypeScript типы в комплекте.
 
 **[Демо](https://shelamkoff.github.io/mentionjs/demo.html)**
 
@@ -276,7 +276,7 @@ m.push({ id: 1, name: 'Анна Иванова' });
 
 ## Поддержка браузеров
 
-Требуется поддержка события `beforeinput` (все современные браузеры). IE11 не поддерживается.
+Требуется современная поддержка `beforeinput`, Selection/Range и AbortController. Native smoke-тесты CI выполняются в актуальных Chrome и Firefox. Safari/WebKit не входит в автоматическую браузерную матрицу. IE11 не поддерживается.
 
 ## Лицензия
 
