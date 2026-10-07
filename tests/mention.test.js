@@ -3612,3 +3612,141 @@ describe('MentionJS destroyed-instance lifecycle', () => {
         current.destroy();
     });
 });
+
+
+describe('MentionJS abortable search sessions', () => {
+    it('passes an AbortSignal to searchFunction', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let receivedSignal = null;
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: async (query, nextPageUrl, context) => {
+                receivedSignal = context.signal;
+                return [];
+            },
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(receivedSignal).toBeInstanceOf(AbortSignal);
+        });
+
+        mention.destroy();
+    });
+
+    it('aborts a pending request when a newer query starts', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let firstSignal = null;
+        const searchFunction = vi.fn((query, nextPageUrl, context) => {
+            if (query === 'a') {
+                firstSignal = context.signal;
+                return new Promise(() => {});
+            }
+            return Promise.resolve([{ id: 2, name: 'Abel' }]);
+        });
+
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction,
+        });
+
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(firstSignal).toBeInstanceOf(AbortSignal);
+        });
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(firstSignal.aborted).toBe(true);
+            expect(document.querySelector('.mention-name')?.textContent)
+                .toBe('Abel');
+        });
+
+        mention.destroy();
+    });
+
+    it('settles an internal search immediately on destroy even if user promise never resolves', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let signal = null;
+        const mention = new MentionJS(textarea, {
+            searchFunction: (query, nextPageUrl, context) => {
+                signal = context.signal;
+                return new Promise(() => {});
+            },
+        });
+
+        const pending = mention._search('');
+        await vi.waitFor(() => {
+            expect(signal).toBeInstanceOf(AbortSignal);
+        });
+
+        mention.destroy();
+
+        const result = await Promise.race([
+            pending,
+            new Promise((_, reject) => setTimeout(
+                () => reject(new Error('search did not cancel')),
+                50
+            )),
+        ]);
+
+        expect(result).toBeNull();
+        expect(signal.aborted).toBe(true);
+    });
+
+    it('keeps legacy one- and two-argument search functions compatible', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const oneArg = vi.fn(async (query) => [{ id: 1, name: query || 'A' }]);
+        const first = new MentionJS(textarea, {
+            searchFunction: oneArg,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(oneArg).toHaveBeenCalled();
+        });
+        first.destroy();
+
+        const second = new MentionJS(textarea, {
+            searchFunction: async (query, nextPageUrl) => ({
+                items: [{ id: 2, name: 'Bob' }],
+                nextPageUrl: null,
+            }),
+        });
+
+        textarea.value = '@';
+        textarea.focus();
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-name')?.textContent)
+                .toBe('Bob');
+        });
+
+        second.destroy();
+    });
+});

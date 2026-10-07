@@ -101,7 +101,8 @@ const m = new MentionJS(element, options);
 ```ts
 type SearchFunction = (
     query: string,
-    nextPageUrl?: string | null
+    nextPageUrl?: string | null,
+    context?: { signal?: AbortSignal }
 ) => Promise<SearchResult | MentionItem[]>;
 ```
 
@@ -126,6 +127,8 @@ type SearchFunction = (
 Можно также вернуть простой массив items (без пагинации).
 
 Пустые запросы (`query === ''`) выполняются без debounce, чтобы сразу показать список при вводе триггер-символа.
+
+`context.signal` отменяется при новом запросе, закрытии дропдауна или уничтожении экземпляра. Старые функции, принимающие только `query` или `(query, nextPageUrl)`, остаются совместимыми.
 
 ### Render-функции
 

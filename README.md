@@ -101,7 +101,8 @@ const m = new MentionJS(element, options);
 ```ts
 type SearchFunction = (
     query: string,
-    nextPageUrl?: string | null
+    nextPageUrl?: string | null,
+    context?: { signal?: AbortSignal }
 ) => Promise<SearchResult | MentionItem[]>;
 ```
 
@@ -126,6 +127,8 @@ Must return a Promise resolving to:
 You may also return a plain array of items (without pagination).
 
 Empty-string queries (`query === ''`) are executed immediately (no debounce) to show the initial list when the trigger character is typed.
+
+`context.signal` is aborted when a query is superseded, the dropdown is closed, or the instance is destroyed. Existing search functions that accept only `query` or `(query, nextPageUrl)` remain compatible.
 
 ### Render Functions
 

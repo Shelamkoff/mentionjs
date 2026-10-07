@@ -17,9 +17,14 @@ declare namespace MentionJS {
         nextPageUrl?: string | null;
     }
 
+    interface SearchContext {
+        signal?: AbortSignal;
+    }
+
     type SearchFunction = (
         query: string,
-        nextPageUrl?: string | null
+        nextPageUrl?: string | null,
+        context?: SearchContext
     ) => Promise<SearchResult | MentionItem[]>;
 
     type RenderItemFunction = (

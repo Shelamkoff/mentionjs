@@ -386,6 +386,8 @@
             this._loadingMoreGeneration = 0;
             this._debounceTimer = null;
             this._debounceReject = null;
+            this._activeController = null;
+            this._activeReject = null;
         }
 
         get items() {
@@ -425,6 +427,7 @@
             if (!nextPageUrl) {
                 this._currentQuery = query;
                 this._cancelDebounce();
+                this._cancelActiveRequest();
                 this._items = [];
                 this._nextPageUrl = null;
                 this._invalidateLoadingMore();
@@ -434,7 +437,32 @@
 
             const execute = async () => {
                 if (!this._options.searchFunction) return { items: [], nextPageUrl: null };
-                return await this._options.searchFunction(query, nextPageUrl);
+
+                this._cancelActiveRequest();
+
+                const controller = typeof AbortController === 'function'
+                    ? new AbortController()
+                    : null;
+                this._activeController = controller;
+
+                try {
+                    return await new Promise((resolve, reject) => {
+                        this._activeReject = reject;
+
+                        Promise.resolve(
+                            this._options.searchFunction(
+                                query,
+                                nextPageUrl,
+                                { signal: controller?.signal }
+                            )
+                        ).then(resolve, reject);
+                    });
+                } finally {
+                    if (this._activeController === controller) {
+                        this._activeController = null;
+                    }
+                    this._activeReject = null;
+                }
             };
 
             let raw;
@@ -452,7 +480,13 @@
                     raw = await execute();
                 }
             } catch (err) {
-                if (err === SEARCH_CANCELLED || requestId !== this._requestId) return null;
+                if (
+                    err === SEARCH_CANCELLED ||
+                    requestId !== this._requestId ||
+                    err?.name === 'AbortError'
+                ) {
+                    return null;
+                }
                 console.warn('MentionJS: search failed', err);
                 return SEARCH_FAILED;
             }
@@ -498,6 +532,7 @@
         cancel() {
             this._requestId++;
             this._cancelDebounce();
+            this._cancelActiveRequest();
             this._items = [];
             this._nextPageUrl = null;
             this._invalidateLoadingMore();
@@ -512,6 +547,17 @@
                 clearTimeout(this._debounceTimer);
                 this._debounceTimer = null;
             }
+        }
+
+        _cancelActiveRequest() {
+            if (this._activeController && !this._activeController.signal.aborted) {
+                this._activeController.abort();
+            }
+            if (this._activeReject) {
+                this._activeReject(SEARCH_CANCELLED);
+            }
+            this._activeController = null;
+            this._activeReject = null;
         }
     }
 
