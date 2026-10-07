@@ -40,5 +40,8 @@
     "lightningcss-cli": "1.33.0",
     "terser": "5.51.2",
     "vitest": "5.0.3"
+  },
+  "allowScripts": {
+    "lightningcss-cli@1.33.0": true
   }
 }
