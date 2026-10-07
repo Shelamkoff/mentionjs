@@ -451,12 +451,15 @@
                         requestReject = reject;
                         this._activeReject = reject;
 
+                        const searchFunction = this._options.searchFunction;
+                        const args = [query, nextPageUrl];
+
+                        if (searchFunction.length >= 3) {
+                            args.push({ signal: controller?.signal });
+                        }
+
                         Promise.resolve(
-                            this._options.searchFunction(
-                                query,
-                                nextPageUrl,
-                                { signal: controller?.signal }
-                            )
+                            searchFunction(...args)
                         ).then(resolve, reject);
                     });
                 } finally {

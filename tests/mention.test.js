@@ -3793,3 +3793,65 @@ describe('MentionJS abort hook ownership', () => {
         expect(signals[1].aborted).toBe(true);
     });
 });
+
+
+describe('MentionJS legacy search invocation shape', () => {
+    it('keeps legacy callbacks at exactly two runtime arguments', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let observedArgs = null;
+        const legacy = function (query, nextPageUrl) {
+            observedArgs = Array.from(arguments);
+            return Promise.resolve([]);
+        };
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: legacy,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(observedArgs).not.toBeNull();
+        });
+
+        expect(observedArgs).toEqual(['', null]);
+
+        mention.destroy();
+    });
+
+    it('passes context only to callbacks explicitly declaring a third parameter', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        let observedArgs = null;
+        const abortAware = function (query, nextPageUrl, context) {
+            observedArgs = Array.from(arguments);
+            return Promise.resolve([]);
+        };
+
+        const mention = new MentionJS(textarea, {
+            searchFunction: abortAware,
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(observedArgs).not.toBeNull();
+        });
+
+        expect(observedArgs).toHaveLength(3);
+        expect(observedArgs[0]).toBe('');
+        expect(observedArgs[1]).toBeNull();
+        expect(observedArgs[2].signal).toBeInstanceOf(AbortSignal);
+
+        mention.destroy();
+    });
+});
