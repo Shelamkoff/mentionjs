@@ -3750,3 +3750,46 @@ describe('MentionJS abortable search sessions', () => {
         second.destroy();
     });
 });
+
+
+describe('MentionJS abort hook ownership', () => {
+    it('keeps the newest cancellation hook after an older request finalizes', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const signals = [];
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: (query, nextPageUrl, context) => {
+                signals.push(context.signal);
+                return new Promise(() => {});
+            },
+        });
+
+        const first = mention._search('');
+        await vi.waitFor(() => {
+            expect(signals).toHaveLength(1);
+        });
+
+        const second = mention._search('next');
+        await vi.waitFor(() => {
+            expect(signals).toHaveLength(2);
+            expect(signals[0].aborted).toBe(true);
+        });
+
+        expect(await first).toBeNull();
+
+        mention.destroy();
+
+        const secondResult = await Promise.race([
+            second,
+            new Promise((_, reject) => setTimeout(
+                () => reject(new Error('newest search did not cancel')),
+                50
+            )),
+        ]);
+
+        expect(secondResult).toBeNull();
+        expect(signals[1].aborted).toBe(true);
+    });
+});

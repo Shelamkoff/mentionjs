@@ -443,10 +443,12 @@
                 const controller = typeof AbortController === 'function'
                     ? new AbortController()
                     : null;
+                let requestReject = null;
                 this._activeController = controller;
 
                 try {
                     return await new Promise((resolve, reject) => {
+                        requestReject = reject;
                         this._activeReject = reject;
 
                         Promise.resolve(
@@ -461,7 +463,9 @@
                     if (this._activeController === controller) {
                         this._activeController = null;
                     }
-                    this._activeReject = null;
+                    if (this._activeReject === requestReject) {
+                        this._activeReject = null;
+                    }
                 }
             };
 
