@@ -738,6 +738,7 @@
             this._mentionCounter = 0;
             this._suppressNextInput = false;
             this._suppressSyntheticContentEditableInput = false;
+            this._destroyed = false;
 
             this._h = {};
             this._a11yOriginal = {};
@@ -746,6 +747,12 @@
             this._bindElementEvents();
             this._bindDocumentClick();
             activeInstances.set(this._el, this);
+        }
+
+        _assertAlive() {
+            if (this._destroyed) {
+                throw new Error('MentionJS: instance has been destroyed');
+            }
         }
 
         _isHostFocused() {
@@ -2075,6 +2082,8 @@
          * ContentEditable: [{id, name}]
          */
         getMentions() {
+            this._assertAlive();
+
             if (this._isTextarea) {
                 return this._textareaMentions.getMentions();
             }
@@ -2097,6 +2106,8 @@
          * @param {{ id: any, name: string }} mentionData
          */
         push(mentionData) {
+            this._assertAlive();
+
             if (
                 !mentionData ||
                 typeof mentionData !== 'object' ||
@@ -2175,6 +2186,8 @@
          * Clear all content and committed mentions.
          */
         clear() {
+            this._assertAlive();
+
             if (this._isTextarea) {
                 this._el.value = '';
                 this._textareaMentions.clear();
@@ -2188,6 +2201,8 @@
          * Tear down all event listeners and remove the dropdown.
          */
         destroy() {
+            if (this._destroyed) return;
+
             this._closeDropdown();
             this._unbindElementEvents();
             this._unbindDocumentClick();
@@ -2196,6 +2211,8 @@
             if (activeInstances.get(this._el) === this) {
                 activeInstances.delete(this._el);
             }
+
+            this._destroyed = true;
         }
 
         static create(element, options) {

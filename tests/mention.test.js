@@ -3576,3 +3576,47 @@ describe('MentionJS onMentionSelect state reconciliation', () => {
         mention.destroy();
     });
 });
+
+
+describe('MentionJS destroyed-instance lifecycle', () => {
+    it('makes destroy() idempotent', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        expect(() => mention.destroy()).not.toThrow();
+        expect(() => mention.destroy()).not.toThrow();
+    });
+
+    it('rejects public mutations and reads after destroy()', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const mention = new MentionJS(textarea);
+        mention.destroy();
+
+        expect(() => mention.getMentions()).toThrow(/destroyed/);
+        expect(() => mention.push({ id: 1, name: 'Alice' })).toThrow(/destroyed/);
+        expect(() => mention.clear()).toThrow(/destroyed/);
+    });
+
+    it('prevents a destroyed instance from mutating a host owned by a new instance', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        const oldInstance = new MentionJS(textarea);
+        oldInstance.destroy();
+
+        const current = new MentionJS(textarea);
+        current.push({ id: 2, name: 'Bob' });
+        const valueAfterCurrent = textarea.value;
+
+        expect(() => oldInstance.push({ id: 1, name: 'Alice' })).toThrow(/destroyed/);
+        expect(textarea.value).toBe(valueAfterCurrent);
+        expect(current.getMentions()).toEqual([
+            { id: 2, name: 'Bob', start: 0, end: 4 },
+        ]);
+
+        current.destroy();
+    });
+});

@@ -73,7 +73,7 @@ declare class MentionJS {
     /** Clear all content and committed mentions. */
     clear(): void;
 
-    /** Tear down all event listeners and remove the dropdown. */
+    /** Tear down all event listeners and remove the dropdown. Idempotent. */
     destroy(): void;
 
     static create(element: HTMLElement, options?: MentionJS.MentionJSOptions): MentionJS;
