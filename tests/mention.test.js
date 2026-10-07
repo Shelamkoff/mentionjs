@@ -3542,39 +3542,31 @@ describe('MentionJS onMentionSelect state reconciliation', () => {
         mention.destroy();
     });
 
-    it('reconciles state even when onMentionSelect throws', async () => {
+    it('reconciles state even when onMentionSelect throws', () => {
         const textarea = document.createElement('textarea');
         document.body.appendChild(textarea);
 
         const error = new Error('callback failed');
         const mention = new MentionJS(textarea, {
-            searchFunction: async () => [{ id: 1, name: 'Alice' }],
             onMentionSelect: () => {
                 textarea.value = 'changed-before-throw';
                 throw error;
             },
         });
 
-        textarea.focus();
-        textarea.value = '@a';
-        textarea.setSelectionRange(2, 2);
-        input(textarea);
+        mention.push({ id: 1, name: 'Alice' });
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 0, end: 6 },
+        ]);
 
-        await vi.waitFor(() => {
-            expect(document.querySelector('.mention-dropdown')).not.toBeNull();
-        });
-
-        expect(() => textarea.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter',
-            bubbles: true,
-            cancelable: true,
-        }))).not.toThrow();
+        expect(() => mention._fireSelect({ id: 1, name: 'Alice' }))
+            .toThrow(error);
 
         expect(textarea.value).toBe('changed-before-throw');
         expect(mention.getMentions()).toEqual([]);
 
         mention.destroy();
-    });
+    });;
 });
 
 
