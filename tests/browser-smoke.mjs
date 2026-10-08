@@ -706,6 +706,47 @@ try {
         reedit.mentions.length === 0,
         'Editing a committed mention did not retain an active span: ' + JSON.stringify(reedit));
 
+
+    // 11. The published demo opts in to multi-word queries in both editors.
+    await request(base + '/url', 'POST', { url: demoUrl });
+    await waitFor(
+        () => execute("return document.documentElement.dataset.demoReady === 'true'"),
+        Boolean, 'Demo not ready for full-name queries'
+    );
+    await execute("document.getElementById('editor').focus();");
+    await sendKeys('@Anna Iv');
+    await waitFor(
+        () => execute("return !!document.querySelector('#editor span.mention.active') && !!document.querySelector('.mention-dropdown.active')"),
+        Boolean, 'Demo rich-text full-name search stopped at a space'
+    );
+    const editorMultiwordQuery = await execute(`
+        return {
+            token: document.querySelector('#editor span.mention.active')?.textContent,
+            feedback: document.querySelector('#search-editor')?.textContent,
+        };
+    `);
+    assert(editorMultiwordQuery.token.replace(/\u00A0/g, ' ') === '@Anna Iv' &&
+        editorMultiwordQuery.feedback.includes('1 result'),
+        'Demo rich-text search failed after whitespace: ' + JSON.stringify(editorMultiwordQuery));
+
+    await execute("document.getElementById('textarea').focus();");
+    await sendKeys('@Anna Iv');
+    await waitFor(
+        () => execute("return !!document.querySelector('.mention-dropdown.active') && document.getElementById('textarea').value === '@Anna Iv'"),
+        Boolean, 'Demo textarea full-name search stopped at a space'
+    );
+    await sendKeys('\uE007');
+    const textareaMultiwordCommit = await execute(`
+        return {
+            mentions: JSON.parse(document.getElementById('mentions-textarea').textContent),
+            value: document.getElementById('textarea').value,
+        };
+    `);
+    assert(textareaMultiwordCommit.mentions.length === 1 &&
+        textareaMultiwordCommit.mentions[0].name === 'Anna Ivanova' &&
+        textareaMultiwordCommit.value.startsWith('@Anna Ivanova'),
+        'Demo did not commit the selected full-name result: ' + JSON.stringify(textareaMultiwordCommit));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {

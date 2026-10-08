@@ -199,7 +199,7 @@
             aria-describedby="hint-editor"
             data-placeholder="Type @ to mention someone…"
         ></div>
-        <p class="hint" id="hint-editor">Type <strong>@</strong> to browse or <strong>@ан</strong> / <strong>@al</strong> to filter people.</p>
+        <p class="hint" id="hint-editor">Type <strong>@</strong> to browse. Try <strong>@Anna Iv</strong> or <strong>@Анна Ив</strong> to search a full name with spaces.</p>
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('editor')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('editor')">Push @Анна</button>
@@ -222,7 +222,7 @@
             placeholder="Type @ to mention someone…"
             rows="4"
         ></textarea>
-        <p class="hint" id="hint-textarea">Mentions keep UTF-16 <code>start</code> and <code>end</code> offsets. Try accepting a result with the caret inside the name.</p>
+        <p class="hint" id="hint-textarea">Try <strong>@Anna Iva</strong> or <strong>@Мария Ва</strong>. Search continues across spaces; mention offsets use UTF-16 <code>start</code> and <code>end</code>.</p>
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('textarea')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('textarea')">Push @Мария</button>
@@ -236,7 +236,7 @@
     <section class="card" aria-labelledby="how-to">
         <h2 id="how-to">Try these interactions</h2>
         <ul class="example-tips">
-            <li><kbd>@</kbd> shows the first page; scroll the dropdown or use <kbd>↓</kbd> to load more.</li>
+            <li><kbd>@</kbd> shows the first page; type a full name with spaces, scroll the dropdown, or use <kbd>↓</kbd> to load more.</li>
             <li><kbd>Enter</kbd> or <kbd>Tab</kbd> commits a selected person. <kbd>Esc</kbd> closes the dropdown.</li>
             <li>Use the buttons above to inspect, insert, and clear mentions using the public API.</li>
             <li>Searches run against local demo data only; no backend requests or account access.</li>
@@ -353,6 +353,7 @@ function clearField(kind) {
 const editorMention = new MentionJS(document.getElementById("editor"), {
     trigger: "@",
     searchFunction: searchFor("editor"),
+    allowSpacesInQuery: true,
     provideSearchContext: true,
     emitInputOnProgrammaticChange: true,
     debounceDelay: 180,
@@ -365,6 +366,7 @@ const editorMention = new MentionJS(document.getElementById("editor"), {
 const textareaMention = new MentionJS(document.getElementById("textarea"), {
     trigger: "@",
     searchFunction: searchFor("textarea"),
+    allowSpacesInQuery: true,
     provideSearchContext: true,
     emitInputOnProgrammaticChange: true,
     debounceDelay: 180,
