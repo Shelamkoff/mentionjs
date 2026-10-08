@@ -4039,12 +4039,14 @@ describe('MentionJS committed identity and atomic insertion regressions', () => 
         mention.destroy();
     });
 
-    it('ends a contenteditable token when whitespace is typed into it', async () => {
+    it('ends a contenteditable token at whitespace when single-word mode is explicitly requested', async () => {
         const editor = document.createElement('div');
         editor.setAttribute('contenteditable', 'true');
         document.body.appendChild(editor);
         const searchFunction = vi.fn().mockResolvedValue([]);
-        const mention = new MentionJS(editor, { searchFunction, debounceDelay: 0 });
+        const mention = new MentionJS(editor, {
+            searchFunction, debounceDelay: 0, allowSpacesInQuery: false,
+        });
         editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@a</span>';
         const span = editor.firstChild;
         mention._mentionSpan = span;
