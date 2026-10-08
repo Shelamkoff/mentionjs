@@ -229,9 +229,19 @@
             });
         }
 
+        _safeRender(name, ...args) {
+            try {
+                // Match the original callback receiver (the options object).
+                return this._options[name].apply(this._options, args);
+            } catch (error) {
+                console.warn('MentionJS: ' + name + ' failed', error);
+                return null;
+            }
+        }
+
         _buildItem(data, index, selectedIndex) {
             if (this._options.renderItem) {
-                const custom = this._options.renderItem(data, index, index === selectedIndex);
+                const custom = this._safeRender('renderItem', data, index, index === selectedIndex);
                 if (custom instanceof HTMLElement) {
                     if (!custom.classList.contains('mention-item')) custom.classList.add('mention-item');
                     if (index === selectedIndex) custom.classList.add('mention-active');
@@ -279,7 +289,7 @@
 
         _buildNoResults() {
             if (this._options.renderNoResults) {
-                const custom = this._options.renderNoResults(this._options.noResultsText);
+                const custom = this._safeRender('renderNoResults', this._options.noResultsText);
                 if (custom instanceof HTMLElement) {
                     if (!custom.hasAttribute('role')) custom.setAttribute('role', 'status');
                     custom.setAttribute('aria-live', 'polite');
@@ -323,7 +333,7 @@
             if (!root || root.querySelector('.mention-loading')) return;
 
             if (this._options.renderLoading) {
-                const custom = this._options.renderLoading();
+                const custom = this._safeRender('renderLoading');
                 if (this._el !== root) return;
                 if (custom instanceof HTMLElement) {
                     if (!custom.classList.contains('mention-loading')) custom.classList.add('mention-loading');

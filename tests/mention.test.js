@@ -5325,3 +5325,81 @@ describe('MentionJS native paragraph edits at saved mention boundaries', () => {
         });
     }
 });
+
+describe('MentionJS custom renderer error containment', () => {
+    it('renders fallback items when renderItem throws without interrupting the editor', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const renderError = new Error('custom row error');
+        const logger = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            renderItem() { throw renderError; },
+        });
+        mention._ui.mount('textarea');
+
+        expect(() => mention._ui.render([{ id: 1, name: 'Alice' }], 0)).not.toThrow();
+        expect(mention._ui.el.querySelector('.mention-name')?.textContent).toBe('Alice');
+        expect(mention._ui.el.querySelector('[role="option"]')).not.toBeNull();
+        expect(logger).toHaveBeenCalledWith('MentionJS: renderItem failed', renderError);
+        mention.destroy();
+    });
+
+    it('renders fallback empty and pagination rows when custom renderers throw', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const logger = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            renderNoResults() { throw new Error('empty renderer error'); },
+            renderLoading() { throw new Error('loading renderer error'); },
+        });
+        mention._ui.mount('textarea');
+        expect(() => mention._ui.render([], 0)).not.toThrow();
+        expect(mention._ui.el.querySelector('.mention-no-results')).not.toBeNull();
+        expect(() => mention._ui.showLoading()).not.toThrow();
+        expect(mention._ui.el.querySelector('.mention-loading')).not.toBeNull();
+        expect(logger.mock.calls.map(args => args[0])).toEqual([
+            'MentionJS: renderNoResults failed',
+            'MentionJS: renderLoading failed',
+        ]);
+        mention.destroy();
+    });
+
+    it('does not leave pagination locked after a renderLoading exception', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => ({
+                items: [{ id: 2, name: 'Next' }],
+                nextPageUrl: null,
+            }),
+            renderLoading() { throw new Error('loader broke'); },
+        });
+        mention._ui.mount('textarea');
+        mention._searchSession._items = [{ id: 1, name: 'Original' }];
+        mention._searchSession._nextPageUrl = 'next';
+        mention._ui.render(mention._searchSession.items, 0);
+
+        await expect(mention._loadMoreResults()).resolves.toBeUndefined();
+        expect(mention._searchSession.isLoadingMore).toBe(false);
+        expect(mention._searchSession.items).toHaveLength(2);
+        expect(mention._ui.el.querySelectorAll('[role="option"]')).toHaveLength(2);
+        mention.destroy();
+    });
+
+    it('keeps the options object as the renderer callback receiver', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let receiver;
+        const mention = new MentionJS(textarea, {
+            renderItem() {
+                receiver = this;
+                return document.createElement('div');
+            },
+        });
+        mention._ui.mount('textarea');
+        mention._ui.render([{ id: 1, name: 'Test' }], 0);
+        expect(receiver).toBe(mention._opts);
+        mention.destroy();
+    });
+});
