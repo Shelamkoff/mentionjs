@@ -1103,8 +1103,10 @@
                     : (node === span ? offset : null);
 
             if (cursor === 0) {
-                this._closeDropdown();
+                // Move the selection while the token is still connected.
+                // Closing a pending token replaces its span with a text node.
                 setCaretBeforeNode(span);
+                this._closeDropdown();
                 return;
             }
 
@@ -1220,6 +1222,12 @@
             }
 
             if (isAtStart) {
+                // Cancelling an uncommitted search unwraps the span. Preserve the
+                // actual replacement node before performing an adjacent edit.
+                const target = this._mentionSpan === span &&
+                    !span.hasAttribute('data-mention-id')
+                    ? this._unwrapMentionSpan(span, sel)
+                    : span;
                 this._closeDropdown();
 
                 const manuallyInsertedText =
@@ -1231,7 +1239,7 @@
                     if (!e.cancelable) return;
                     e.preventDefault();
                     const tn = document.createTextNode(e.data);
-                    span.parentNode.insertBefore(tn, span);
+                    target.parentNode.insertBefore(tn, target);
                     setCaretAt(tn, e.data.length);
                     this._dispatchContentEditableInput(e.inputType, e.data);
                     return;
@@ -1240,7 +1248,7 @@
                 if (e.inputType === 'deleteContentBackward') {
                     if (!e.cancelable) return;
                     e.preventDefault();
-                    if (this._backspaceBeforeSpan(span, sel)) {
+                    if (this._backspaceBeforeSpan(target, sel)) {
                         this._dispatchContentEditableInput(e.inputType);
                     }
                     return;
@@ -1249,7 +1257,7 @@
                 if (e.inputType === 'deleteContentForward') {
                     if (!e.cancelable) return;
                     e.preventDefault();
-                    if (this._deleteForwardInSpan(span, spanText)) {
+                    if (this._deleteForwardInSpan(target, spanText)) {
                         this._dispatchContentEditableInput(e.inputType);
                     }
                     return;
@@ -1297,8 +1305,9 @@
                 if (isActive && this._searchSession.items.length > 0) return;
 
                 span.classList.remove('active');
-                this._closeDropdown();
+                // The active span may be replaced by plain text on close.
                 setCaretAfterNode(span);
+                this._closeDropdown();
                 if (this._insertBr(window.getSelection())) {
                     this._dispatchContentEditableInput(e.inputType);
                 }

@@ -3855,3 +3855,68 @@ describe('MentionJS legacy search invocation shape', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS detached active-token editing regressions', () => {
+    function activeToken(before = '') {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = before +
+            '<span class="mention active" data-mentionjs-token="true">@a</span>';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        const span = editor.querySelector('span.mention');
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, 0);
+        return { editor, mention, span };
+    }
+
+    it('inserts text before an unfinished token without using its detached span', () => {
+        const { editor, mention } = activeToken();
+        const change = beforeInput(editor, 'insertText', 'X');
+        expect(change.defaultPrevented).toBe(true);
+        expect(editor.textContent).toBe('X@a');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(window.getSelection().anchorNode.textContent).toBe('X');
+        expect(window.getSelection().anchorOffset).toBe(1);
+        mention.destroy();
+    });
+
+    it('backspaces adjacent formatted text before an unfinished token', () => {
+        const { editor, mention } = activeToken('<strong>abc</strong>');
+        beforeInput(editor, 'deleteContentBackward');
+        expect(editor.querySelector('strong')?.textContent).toBe('ab');
+        expect(editor.textContent).toBe('ab@a');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        mention.destroy();
+    });
+
+    it('forward-deletes the trigger of an unfinished token', () => {
+        const { editor, mention } = activeToken();
+        beforeInput(editor, 'deleteContentForward');
+        expect(editor.textContent).toBe('a');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        mention.destroy();
+    });
+
+    it('moves IME composition before an unfinished token without a detached-range error', () => {
+        const { editor, mention } = activeToken();
+        editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        expect(editor.textContent).toBe('@a');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(window.getSelection().anchorNode).toBe(editor);
+        expect(window.getSelection().anchorOffset).toBe(0);
+        mention.destroy();
+    });
+
+    it('inserts a line break after releasing an unfinished token', () => {
+        const { editor, mention, span } = activeToken();
+        setCaret(span.firstChild, span.textContent.length);
+        const change = beforeInput(editor, 'insertParagraph');
+        expect(change.defaultPrevented).toBe(true);
+        expect(editor.textContent).toBe('@a');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.querySelector('br')).not.toBeNull();
+        mention.destroy();
+    });
+});
