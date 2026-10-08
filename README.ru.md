@@ -1,5 +1,7 @@
 # MentionJS
 
+[English](README.md)
+
 @-mention автокомплит для `<textarea>` и `contenteditable`.
 Без зависимостей. ~10 КБ gzipped. TypeScript типы в комплекте.
 
@@ -31,11 +33,12 @@ const mention = new MentionJS(document.getElementById('editor'), {
     trigger: '@',
     debounceDelay: 300,
     noResultsText: 'Никого не найдено',
-    searchFunction: async (query, nextPageUrl) => {
+    provideSearchContext: true,
+    searchFunction: async (query, nextPageUrl, context = {}) => {
         const url = nextPageUrl || `/api/users?q=${encodeURIComponent(query)}`;
-        const res = await fetch(url);
-        return await res.json();
-        // Ожидается: { items: [{ id, name, avatar?, details? }], nextPageUrl: string | null }
+        const res = await fetch(url, { signal: context.signal });
+        if (!res.ok) throw new Error(`Search failed (${res.status})`);
+        return res.json(); // { items: [{ id, name, avatar?, details? }], nextPageUrl }
     },
     onMentionSelect(data) {
         console.log('Выбран:', data.id, data.name);
@@ -43,6 +46,8 @@ const mention = new MentionJS(document.getElementById('editor'), {
 });
 </script>
 ```
+
+В примере включён `provideSearchContext`: у третьего параметра функции есть значение по умолчанию, поэтому для получения `AbortSignal` нужен явный opt-in. Для пагинации библиотека передаёт `nextPageUrl` вашей функции поиска, но не загружает этот URL самостоятельно.
 
 ## Установка
 
@@ -130,7 +135,7 @@ type SearchFunction = (
 
 Пустые запросы (`query === ''`) выполняются без debounce, чтобы сразу показать список при вводе триггер-символа.
 
-`context.signal` отменяется при новом запросе, закрытии дропдауна или уничтожении экземпляра. Старые функции, принимающие только `query` или `(query, nextPageUrl)`, остаются совместимыми. Для функций поиска с параметрами по умолчанию или rest установите `provideSearchContext: true`: третий аргумент будет передан даже при меньшем значении JavaScript `function.length`.
+`context.signal` отменяется у **ещё выполняющегося запроса** при смене запроса, закрытии дропдауна или уничтожении экземпляра. Уже завершившийся запрос не отменяется задним числом. Старые функции с аргументами `query` или `(query, nextPageUrl)` остаются совместимыми. Для функций с параметрами по умолчанию или rest установите `provideSearchContext: true`: третий аргумент будет передан даже при меньшем значении JavaScript `function.length`.
 
 ### Render-функции
 
@@ -205,7 +210,7 @@ renderLoading() {
 
 Возвращает массив всех зафиксированных упоминаний.
 
-**Textarea** — объекты со смещениями символов:
+**Textarea** — объекты со смещениями в кодовых единицах UTF-16 (как `textarea.selectionStart` и `selectionEnd`, а не число Unicode-графем):
 
 ```js
 [{ id: 1, name: 'Анна Иванова', start: 0, end: 13 }]
@@ -261,7 +266,7 @@ m.push({ id: 1, name: 'Анна Иванова' });
 
 ## Как это работает
 
-**Textarea**: Упоминания хранятся как объекты `{ id, name, start, end }`. Диапазон изменения фиксируется через `beforeinput` и сверяется после `input`, поэтому identity упоминания остаётся привязанной к исходному диапазону. Текст упоминания отображается inline как `@Имя`.
+**Textarea**: Упоминания хранятся как объекты `{ id, name, start, end }`, диапазоны `[start, end)` измеряются в UTF-16. Обычные изменения фиксируются через `beforeinput` и сверяются после `input`. Присваивание `textarea.value` из JavaScript не вызывает `input`: `getMentions()` и `push()` консервативно сверяют значение и могут отбросить ID, если одинаковый текст не позволяет достоверно определить исходное упоминание. Упоминание отображается как `@Имя`.
 
 **ContentEditable**: Каждое упоминание — это `<span class="mention">` с внутренним маркером владения и атрибутами `data-mention-id` / `data-mention-name`. Активные упоминания имеют класс `.active`. Изменения браузера сверяются после `input`, а операции, требующие атомарного поведения mention, обрабатываются через `beforeinput`.
 
@@ -275,6 +280,11 @@ m.push({ id: 1, name: 'Анна Иванова' });
 | `dist/mention.min.js` | Генерируемый минифицированный JS (`npm run build` / `prepack`) |
 | `dist/mention.min.css` | Генерируемый минифицированный CSS (`npm run build` / `prepack`) |
 | `demo.html` | Интерактивная демо-страница |
+| `index.html` | Точка входа GitHub Pages (перенаправляет на демо) |
+| `.nojekyll` | Отключает Jekyll для статического сайта |
+| `.github/workflows/ci.yml` | Тесты и проверка сборки |
+| `.github/workflows/pages.yml` | Публикация GitHub Pages после успешного CI |
+| `dist/mention.d.ts` | Генерируемая копия TypeScript-типов |
 
 Каталог `dist/` генерируется и не хранится в Git. В опубликованный npm-пакет он включается автоматически: `prepack` запускает сборку перед упаковкой.
 
@@ -296,4 +306,4 @@ MIT
 
 `demo.html` работает с локальными `mention.js` и `mention.css`. В демо показаны отменяемый поиск, пагинация, выбор с клавиатуры, `push()` / `clear()` / `getMentions()`, актуальные ID упоминаний и диапазоны в textarea. `index.html` открывает демо по корневому адресу GitHub Pages.
 
-Workflow **Deploy demo to Pages** публикует демо и минифицированные JS/CSS **только после успешного CI ветки main**. Для первоначальной настройки выберите **Settings → Pages → Build and deployment → Source: GitHub Actions**. Ветка `gh-pages` не нужна. Один лишь workflow не включает Pages без необходимой настройки репозитория.
+Workflow **Deploy demo to Pages** публикует демо и минифицированные JS/CSS **после успешного CI, запущенного пушем в `main`**. [Сайт GitHub Pages](https://shelamkoff.github.io/mentionjs/) уже успешно опубликован. Используется **Settings → Pages → Build and deployment → Source: GitHub Actions**; ветка `gh-pages` не нужна.

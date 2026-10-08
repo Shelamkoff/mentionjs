@@ -1,5 +1,7 @@
 # MentionJS
 
+[Русская версия](README.ru.md)
+
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
 No dependencies. ~10 KB gzipped. TypeScript definitions included.
 
@@ -31,11 +33,12 @@ const mention = new MentionJS(document.getElementById('editor'), {
     trigger: '@',
     debounceDelay: 300,
     noResultsText: 'Not found',
-    searchFunction: async (query, nextPageUrl) => {
+    provideSearchContext: true,
+    searchFunction: async (query, nextPageUrl, context = {}) => {
         const url = nextPageUrl || `/api/users?q=${encodeURIComponent(query)}`;
-        const res = await fetch(url);
-        return await res.json();
-        // Expected: { items: [{ id, name, avatar?, details? }], nextPageUrl: string | null }
+        const res = await fetch(url, { signal: context.signal });
+        if (!res.ok) throw new Error(`Search failed (${res.status})`);
+        return res.json(); // { items: [{ id, name, avatar?, details? }], nextPageUrl }
     },
     onMentionSelect(data) {
         console.log('Selected:', data.id, data.name);
@@ -43,6 +46,8 @@ const mention = new MentionJS(document.getElementById('editor'), {
 });
 </script>
 ```
+
+The example enables `provideSearchContext` because its callback declares a default third parameter. The request's `AbortSignal` is forwarded to `fetch`. The library passes `nextPageUrl` back to your callback for pagination, but does not fetch that URL itself.
 
 ## Installation
 
@@ -130,7 +135,7 @@ You may also return a plain array of items (without pagination).
 
 Empty-string queries (`query === ''`) are executed immediately (no debounce) to show the initial list when the trigger character is typed.
 
-`context.signal` is aborted when a query is superseded, the dropdown is closed, or the instance is destroyed. Existing search functions that accept only `query` or `(query, nextPageUrl)` remain compatible. Set `provideSearchContext: true` to receive the third argument in a callback with default or rest parameters (which report a smaller JavaScript `function.length`).
+`context.signal` is aborted for an **in-flight request** when it is superseded, the dropdown closes, or the instance is destroyed. A request that has already completed is not retroactively aborted. Existing search functions accepting only `query` or `(query, nextPageUrl)` remain compatible. Set `provideSearchContext: true` to receive the third argument in a callback with default or rest parameters (which report a smaller JavaScript `function.length`).
 
 ### Render Functions
 
@@ -205,7 +210,7 @@ renderLoading() {
 
 Returns an array of all committed mentions.
 
-**Textarea** returns objects with character offsets:
+**Textarea** returns UTF-16 code-unit offsets (as in `textarea.selectionStart` and `selectionEnd`, not Unicode grapheme counts):
 
 ```js
 [{ id: 1, name: 'Alice', start: 0, end: 6 }]
@@ -261,7 +266,7 @@ Import `mention.css` for default styles. All classes are customizable:
 
 ## How It Works
 
-**Textarea**: Mentions are tracked as `{ id, name, start, end }` objects. Edit ranges are captured from `beforeinput` and reconciled after `input`, so committed mention identity stays attached to the original range. The mention text is displayed inline as `@Name`.
+**Textarea**: Mentions are tracked as `{ id, name, start, end }` objects with UTF-16, half-open `[start, end)` ranges. Native edits are tracked via `beforeinput` and reconciled after `input`. Assigning `textarea.value` programmatically does not emit `input`; `getMentions()` and `push()` conservatively reconcile changes and may drop an ID when identical visible text makes mention identity ambiguous. The mention text is displayed inline as `@Name`.
 
 **ContentEditable**: Each mention is a `<span class="mention">` with internal ownership metadata plus `data-mention-id` and `data-mention-name`. Active (in-progress) mentions have the `.active` class. Browser-driven input is reconciled after `input`, while operations that need atomic mention behavior are handled through `beforeinput`.
 
@@ -275,6 +280,11 @@ Import `mention.css` for default styles. All classes are customizable:
 | `dist/mention.min.js` | Generated minified JS (`npm run build` / `prepack`) |
 | `dist/mention.min.css` | Generated minified CSS (`npm run build` / `prepack`) |
 | `demo.html` | Interactive demo page |
+| `index.html` | GitHub Pages root entrypoint (redirects to the demo) |
+| `.nojekyll` | Disables Jekyll processing for the static site |
+| `.github/workflows/ci.yml` | Tests and build checks |
+| `.github/workflows/pages.yml` | GitHub Pages deployment after successful CI |
+| `dist/mention.d.ts` | Generated copy of the TypeScript declarations |
 
 The `dist/` directory is generated and is not stored in Git. It is included in published npm packages because `prepack` runs the build automatically.
 
@@ -296,4 +306,4 @@ MIT
 
 `demo.html` uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. `index.html` provides a GitHub Pages root entrypoint.
 
-The **Deploy demo to Pages** workflow publishes the demo and the minified JS/CSS **only after main-branch CI succeeds**. For initial setup, choose **Settings → Pages → Build and deployment → Source: GitHub Actions**. No separate `gh-pages` branch is needed. Adding the workflow cannot by itself enable Pages if the repository has not been configured.
+The **Deploy demo to Pages** workflow publishes the demo and minified JS/CSS **after a successful CI run triggered by a push to `main`**. The [GitHub Pages site](https://shelamkoff.github.io/mentionjs/) has been deployed successfully. Pages uses **Settings → Pages → Build and deployment → Source: GitHub Actions**; no `gh-pages` branch is required.
