@@ -280,8 +280,12 @@ The `dist/` directory is generated and is not stored in Git. It is included in p
 
 ## Browser Support
 
-Requires modern `beforeinput`, Selection/Range, and AbortController support. Native CI smoke tests run in current Chrome and Firefox. Safari/WebKit is not part of the automated browser matrix. IE11 is not supported.
+Requires modern `beforeinput`, Selection/Range, and AbortController support. Native CI smoke tests run source and the minified npm build in current Chrome and Firefox. Safari/WebKit is not part of the automated browser matrix. IE11 is not supported.
 
 ## License
 
 MIT
+
+## Trust Boundary
+
+`contenteditable` can import pre-existing mention spans carrying `data-mention-id` and `data-mention-name`. Such markup is treated as application-provided metadata, not as an authenticated identity. Sanitize untrusted HTML before inserting it into an editing host and validate mention IDs server-side before performing privileged actions. Custom render functions are also responsible for safe handling of untrusted content.

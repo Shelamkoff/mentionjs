@@ -5,9 +5,13 @@ import { pathToFileURL } from 'node:url';
 const DRIVER_URL = 'http://127.0.0.1:9515';
 const ELEMENT_KEY = 'element-6066-11e4-a52e-4f735466cecf';
 const BROWSER = process.env.BROWSER || 'chrome';
+const BUNDLE = process.env.BUNDLE || 'source';
 
 if (!['chrome', 'firefox'].includes(BROWSER)) {
     throw new Error(`Unsupported browser: ${BROWSER}`);
+}
+if (!['source', 'dist'].includes(BUNDLE)) {
+    throw new Error(`Unsupported browser fixture: ${BUNDLE}`);
 }
 
 function assert(condition, message) {
@@ -119,7 +123,9 @@ try {
     };
 
     const fixtureUrl = pathToFileURL(
-        resolve(process.cwd(), 'tests/browser-smoke.html')
+        resolve(process.cwd(), BUNDLE === 'dist'
+            ? 'tests/browser-smoke-dist.html'
+            : 'tests/browser-smoke.html')
     ).href;
     await request(base + '/url', 'POST', { url: fixtureUrl });
 
@@ -403,7 +409,7 @@ try {
     await assertEditableMentionConsistency('redo');
 
     await execute('window.__browserSmokePassed = true; return true;');
-    console.log(`MentionJS ${BROWSER} smoke tests passed`);
+    console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
     console.error(error);
     console.error(driverOutput);
