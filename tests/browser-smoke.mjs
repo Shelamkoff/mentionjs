@@ -1267,7 +1267,7 @@ try {
     // immediately before it. Probe a selection-only native edit separately,
     // without using that probe as the test oracle.
     const boundaryUndoCases = [];
-    for (const mode of ['current', 'native-reposition']) {
+    for (const mode of ['current', 'native-reposition', 'exec-empty', 'exec-nbsp', 'exec-zwsp', 'native-prefilled']) {
         await request(base + '/url', 'POST', { url: fixtureUrl });
         await execute(`
             const editor = document.getElementById('editor');
@@ -1295,6 +1295,37 @@ try {
                     return false;
                 };
             }
+            if (arguments[0] === 'native-prefilled' ||
+                arguments[0].startsWith('exec-')) {
+                const mode = arguments[0];
+                window.__instance._insertTextBeforeCommittedMention = (e) => {
+                    if (e.inputType !== 'insertText' || window.__execInProgress) return false;
+                    const span = editor.querySelector('span.mention');
+                    const sentinel = mode === 'exec-nbsp' ? '\u00A0' :
+                        mode === 'exec-zwsp' ? '\u200B' :
+                        mode === 'native-prefilled' ? '~' : '';
+                    const node = document.createTextNode(sentinel);
+                    span.before(node);
+                    const r = document.createRange();
+                    r.setStart(node, 0);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    window.__boundarySentinel = node;
+                    window.__sentinelValue = sentinel;
+                    if (mode === 'native-prefilled') return false;
+                    e.preventDefault();
+                    window.__execInProgress = true;
+                    try {
+                        window.__execOk = document.execCommand('insertText', false, e.data);
+                    } catch (err) {
+                        window.__execError = String(err);
+                    } finally {
+                        window.__execInProgress = false;
+                    }
+                    return true;
+                };
+            }
         `, [mode]);
         const state = () => execute(`
             const editor = document.getElementById('editor');
@@ -1305,12 +1336,21 @@ try {
             };
         `);
         await sendKeys('x');
+        await execute(`
+            const node = window.__boundarySentinel;
+            const value = window.__sentinelValue;
+            if (value && node?.isConnected) {
+                const index = node.textContent.indexOf(value);
+                if (index >= 0) node.deleteData(index, value.length);
+            }
+        `);
         const inserted = await state();
         await sendKeys('\uE009z\uE000');
         const undone = await state();
         await sendKeys('\uE009\uE008z\uE000');
         const redone = await state();
-        boundaryUndoCases.push({ mode, inserted, undone, redone });
+        const probeInfo = await execute("return { execOk: window.__execOk ?? null, execError: window.__execError ?? null, sentinel: window.__boundarySentinel?.textContent ?? null };");
+        boundaryUndoCases.push({ mode, inserted, undone, redone, probeInfo });
     }
     const undoCurrent = boundaryUndoCases.find(c => c.mode === 'current');
     assert(undoCurrent.inserted.text.startsWith('x@Bob') &&
