@@ -47,6 +47,8 @@ declare namespace MentionJS {
         provideSearchContext?: boolean;
         /** Notify native input listeners after push() and clear(). Disabled for legacy compatibility. */
         emitInputOnProgrammaticChange?: boolean;
+        /** Allow multi-word searches with spaces and NBSP. Line breaks still end the search. Default: false. */
+        allowSpacesInQuery?: boolean;
         /** Non-negative finite delay in milliseconds. */
         debounceDelay?: number;
         noResultsText?: string;

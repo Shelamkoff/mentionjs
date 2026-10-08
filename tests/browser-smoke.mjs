@@ -627,6 +627,7 @@ try {
         document.addEventListener('selectionchange', () => snapshot('selectionchange'));
         window.__instance = new MentionJS(editor, {
             debounceDelay: 30,
+            allowSpacesInQuery: true,
             searchFunction: async (query) => {
                 await new Promise(resolve => setTimeout(resolve, 85));
                 return query.toLowerCase().startsWith('anna')
@@ -668,6 +669,7 @@ try {
         selection.addRange(range);
         window.__instance = new MentionJS(editor, {
             debounceDelay: 0,
+            allowSpacesInQuery: true,
             searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
         });
     `);

@@ -4979,3 +4979,136 @@ describe('MentionJS backwards selection during token cleanup', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS optional multi-word mention searches', () => {
+    it('rejects non-boolean allowSpacesInQuery values', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        expect(() => new MentionJS(textarea, {
+            allowSpacesInQuery: 'yes',
+        })).toThrow(/allowSpacesInQuery/);
+    });
+
+    it('keeps the previous whitespace-as-terminator behavior by default', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            searchFunction, debounceDelay: 0,
+        });
+        textarea.focus();
+        textarea.value = '@Anna';
+        textarea.setSelectionRange(5, 5);
+        input(textarea);
+        await vi.waitFor(() => expect(searchFunction).toHaveBeenCalledWith('Anna', null));
+        textarea.value = '@Anna ';
+        textarea.setSelectionRange(6, 6);
+        input(textarea);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(mention._mentionStart).toBeNull();
+        mention.destroy();
+    });
+
+    it('keeps a textarea search active across spaces and commits the whole name', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([
+            { id: 1, name: 'Anna Ivanova' },
+        ]);
+        const mention = new MentionJS(textarea, {
+            allowSpacesInQuery: true, debounceDelay: 0, searchFunction,
+        });
+        textarea.focus();
+        textarea.value = '@Anna Iva';
+        textarea.setSelectionRange(9, 9);
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('Anna Iva', null);
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        expect(textarea.value).toBe('@Anna Ivanova ');
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Anna Ivanova', start: 0, end: 13 },
+        ]);
+        mention.destroy();
+    });
+
+    it('replaces a complete multi-word textarea token before punctuation', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            allowSpacesInQuery: true, debounceDelay: 0,
+            searchFunction: async () => [{ id: 2, name: 'Anna Ivanova' }],
+        });
+        textarea.focus();
+        textarea.value = '@Anna Ivanod, rest';
+        textarea.setSelectionRange(4, 4);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown.active')).not.toBeNull());
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        expect(textarea.value).toBe('@Anna Ivanova, rest');
+        expect(mention.getMentions()).toEqual([
+            { id: 2, name: 'Anna Ivanova', start: 0, end: 13 },
+        ]);
+        mention.destroy();
+    });
+
+    it('normalizes browser-inserted NBSP before calling a contenteditable search', async () => {
+        const editor = document.createElement('div');
+        editor.contentEditable = 'true';
+        editor.innerHTML =
+            '<span class="mention active" data-mentionjs-token="true">@Anna\u00A0Iva</span>';
+        document.body.appendChild(editor);
+        const span = editor.firstChild;
+        const searchFunction = vi.fn().mockResolvedValue([{ id: 3, name: 'Anna Ivanova' }]);
+        const mention = new MentionJS(editor, {
+            allowSpacesInQuery: true,
+            debounceDelay: 0,
+            searchFunction,
+        });
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('Anna Iva', null);
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+        expect(editor.querySelector('span.mention.active')).toBe(span);
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('ends multi-word searches on newline and when the trigger is removed', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            allowSpacesInQuery: true,
+            searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+        });
+        textarea.focus();
+        textarea.value = '@Anna Ivan';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown.active')).not.toBeNull());
+        textarea.value = '@Anna\nIvan';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+
+        textarea.value = '@Anna Ivan';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown.active')).not.toBeNull());
+        textarea.value = 'Anna Ivan';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+});

@@ -20,6 +20,7 @@
         searchFunction: null,
         provideSearchContext: false,
         emitInputOnProgrammaticChange: false,
+        allowSpacesInQuery: false,
         debounceDelay: 300,
         noResultsText: 'No results found',
         dropdownClass: '',
@@ -884,7 +885,9 @@
             if (typeof this._opts.dropdownClass !== 'string') {
                 throw new Error('MentionJS: dropdownClass must be a string');
             }
-            for (const optionName of ['provideSearchContext', 'emitInputOnProgrammaticChange']) {
+            for (const optionName of [
+                'provideSearchContext', 'emitInputOnProgrammaticChange', 'allowSpacesInQuery',
+            ]) {
                 if (typeof this._opts[optionName] !== 'boolean') {
                     throw new Error(`MentionJS: ${optionName} must be a boolean`);
                 }
@@ -1364,7 +1367,7 @@
             }
 
             const query = text.substring(this._opts.trigger.length);
-            if (/\s/u.test(query)) {
+            if (this._queryHasTerminator(query)) {
                 // The token ended at whitespace. Keep the typed text, but stop
                 // treating it as an unfinished mention or a search context.
                 this._invalidateMentionMetadata(span);
@@ -2273,6 +2276,22 @@
             return true;
         }
 
+        _queryHasTerminator(query) {
+            // In multi-word mode, spaces (including contenteditable's NBSP)
+            // are part of a person's name; line and tab breaks still end it.
+            return this._opts.allowSpacesInQuery
+                ? /[\r\n\t\f\v]/u.test(query)
+                : /\s/u.test(query);
+        }
+
+        _normalizeQuery(query) {
+            // Chrome inserts NBSP into contenteditable when a user types a
+            // space. Search adapters should always receive an ordinary space.
+            return this._opts.allowSpacesInQuery
+                ? query.replace(/\u00A0/gu, ' ')
+                : query;
+        }
+
         _findTokenAtCursor(text, position) {
             const before = text.substring(0, position);
             const triggerIdx = before.lastIndexOf(this._opts.trigger);
@@ -2282,15 +2301,23 @@
 
             const triggerEnd = triggerIdx + this._opts.trigger.length;
             const query = before.substring(triggerEnd);
-            if (/\s/.test(query)) return null;
+            if (this._queryHasTerminator(query)) return null;
             if (triggerEnd + query.length !== position) return null;
 
             // The query ends at the caret, but accepting a result must
             // replace the whole token, including characters after the caret.
             let end = position;
-            while (end < text.length && !/[\s,;!?]/u.test(text[end])) end++;
+            const delimiter = this._opts.allowSpacesInQuery
+                ? /[\r\n\t\f\v,;!?]/u
+                : /[\s,;!?]/u;
+            while (end < text.length && !delimiter.test(text[end])) {
+                // Two mentions separated by a space remain separate tokens.
+                if (text.startsWith(this._opts.trigger, end) &&
+                    end > triggerEnd && /\s/u.test(text[end - 1])) break;
+                end++;
+            }
 
-            return { start: triggerIdx, end, query };
+            return { start: triggerIdx, end, query: this._normalizeQuery(query) };
         }
 
         _openDropdownForSpan(items, span) {
@@ -2441,6 +2468,7 @@
         }
 
         async _search(query, nextPageUrl = null) {
+            query = this._normalizeQuery(query);
             if (!nextPageUrl) {
                 this._bindSelectionChange();
                 if (this._ui.el) {
