@@ -486,6 +486,62 @@ try {
         staleCommit.mentions.length === 0 && !staleCommit.dropdown,
         'Stale result after silent host edit: ' + JSON.stringify(staleCommit));
 
+    // 8. Real browser selection must survive cancellation of an active
+    // contenteditable mention, including backwards anchor/focus direction.
+    await execute(`
+        window.__instance.destroy();
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '';
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [],
+        });
+    `);
+    await sendKeys('@al');
+    await waitFor(
+        () => execute(`
+            const span = document.querySelector('#editor span.mention.active');
+            return !!span && span.textContent === '@al' &&
+                !!document.querySelector('.mention-dropdown.active');
+        `),
+        Boolean,
+        'Active rich-text mention did not initialize for selection test'
+    );
+    const backwardSelection = await execute(`
+        const editor = document.getElementById('editor');
+        const span = editor.querySelector('span.mention.active');
+        const tail = document.createTextNode(' tail');
+        editor.appendChild(tail);
+        const selection = window.getSelection();
+        selection.setBaseAndExtent(tail, 3, span.firstChild, 1);
+        document.dispatchEvent(new Event('selectionchange'));
+        return {
+            hasSpan: !!editor.querySelector('span.mention'),
+            text: editor.textContent,
+            selected: selection.toString(),
+            anchorIsTail: selection.anchorNode === tail,
+            anchorOffset: selection.anchorOffset,
+            focusIsText: selection.focusNode === editor.firstChild,
+            focusOffset: selection.focusOffset,
+        };
+    `);
+    assert(!backwardSelection.hasSpan &&
+        backwardSelection.text === '@al tail' &&
+        backwardSelection.selected === 'al ta' &&
+        backwardSelection.anchorIsTail &&
+        backwardSelection.anchorOffset === 3 &&
+        backwardSelection.focusIsText &&
+        backwardSelection.focusOffset === 1,
+        'Backward selection was not preserved after cancelling a mention: ' +
+        JSON.stringify(backwardSelection));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
