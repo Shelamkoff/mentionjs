@@ -312,6 +312,27 @@ try {
     assert(backspace.text === '' && !backspace.span,
         'Backspace did not remove trigger-only token cleanly');
 
+    // Removing the trigger ends the old search; typing a new trigger must
+    // start a clean independent search with the caret inside a new span.
+    await sendKeys('@x');
+    await waitFor(
+        () => execute("return document.querySelector('#editor span.mention.active')?.textContent === '@x' && !!document.querySelector('.mention-dropdown.active')"),
+        Boolean,
+        'Search did not restart after deleting and retyping the trigger'
+    );
+    await sendKeys('\uE00C');
+    const cancelledRestart = await execute(`
+        const editor = document.getElementById('editor');
+        return {
+            text: editor.textContent,
+            pending: !!editor.querySelector('span.mention'),
+            dropdown: !!document.querySelector('.mention-dropdown'),
+        };
+    `);
+    assert(cancelledRestart.text === '@x' &&
+        !cancelledRestart.pending && !cancelledRestart.dropdown,
+        'Escape after restarting a deleted trigger left broken markup');
+
     // 5. Native undo/redo must never leave mention metadata detached from text.
     await execute(`
         window.__instance?.destroy();
