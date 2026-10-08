@@ -3,7 +3,7 @@
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
 No dependencies. ~10 KB gzipped. TypeScript definitions included.
 
-**[Live Demo](https://shelamkoff.github.io/mentionjs/demo.html)**
+**[Interactive demo](https://shelamkoff.github.io/mentionjs/)** ([direct link](https://shelamkoff.github.io/mentionjs/demo.html))
 
 ## Features
 
@@ -291,3 +291,9 @@ MIT
 ## Trust Boundary
 
 `contenteditable` can import pre-existing mention spans carrying `data-mention-id` and `data-mention-name`. Such markup is treated as application-provided metadata, not as an authenticated identity. Sanitize untrusted HTML before inserting it into an editing host and validate mention IDs server-side before performing privileged actions. Custom render functions are also responsible for safe handling of untrusted content.
+
+## Demo deployment
+
+`demo.html` uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. `index.html` provides a GitHub Pages root entrypoint.
+
+The **Deploy demo to Pages** workflow publishes the demo and the minified JS/CSS **only after main-branch CI succeeds**. For initial setup, choose **Settings → Pages → Build and deployment → Source: GitHub Actions**. No separate `gh-pages` branch is needed. Adding the workflow cannot by itself enable Pages if the repository has not been configured.
