@@ -4274,3 +4274,77 @@ describe('MentionJS Unicode fallback and numeric identifier boundaries', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS ambiguous textarea edits and identity protection', () => {
+    function twoIdenticalMentions() {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        mention.push({ id: 'original-first', name: 'Alice' });
+        mention.push({ id: 'original-second', name: 'Alice' });
+        expect(textarea.value).toBe('@Alice @Alice ');
+        return { textarea, mention };
+    }
+
+    it('does not retain an arbitrary ID when one identical token is removed without beforeinput', () => {
+        const { textarea, mention } = twoIdenticalMentions();
+        textarea.value = '@Alice ';
+
+        // The remaining visible token could have come from either source;
+        // returning original-first would incorrectly identify original-second.
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('does not attach an existing mention ID to an inserted identical token', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 'old', name: 'Alice' });
+        textarea.value = '@Alice @Alice ';
+
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('keeps unambiguous identity when text is inserted outside its range', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 1, name: 'Alice' });
+        textarea.value = 'Hello ' + textarea.value;
+
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 6, end: 12 },
+        ]);
+        mention.destroy();
+    });
+
+    it('preserves exactly the surviving ID with a matching native beforeinput range', () => {
+        const { textarea, mention } = twoIdenticalMentions();
+        textarea.setSelectionRange(0, 7);
+        beforeInput(textarea, 'deleteContentBackward');
+        textarea.value = '@Alice ';
+        textarea.setSelectionRange(0, 0);
+        input(textarea);
+
+        expect(mention.getMentions()).toEqual([
+            { id: 'original-second', name: 'Alice', start: 0, end: 6 },
+        ]);
+        mention.destroy();
+    });
+
+    it('does not trust an invalidated beforeinput range when a framework rewrites text', () => {
+        const { textarea, mention } = twoIdenticalMentions();
+        textarea.setSelectionRange(14, 14);
+        beforeInput(textarea, 'insertText', 'X');
+        // A controlled input handler removes one ambiguous token instead.
+        textarea.value = '@Alice ';
+        textarea.setSelectionRange(7, 7);
+        input(textarea);
+
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+});

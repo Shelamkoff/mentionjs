@@ -641,20 +641,48 @@
             const edit = this._edit;
 
             if (previousText !== text) {
-                const { start: editStart, end: editEnd } = this._resolveEdit(previousText, text, edit);
                 const delta = text.length - previousText.length;
+                const suffix = previousText.substring(edit?.end ?? previousText.length);
+                const trustedEdit = edit &&
+                    edit.value === previousText &&
+                    text.startsWith(previousText.substring(0, edit.start)) &&
+                    text.endsWith(suffix);
 
-                this._mentions = this._mentions.filter((mention) => {
-                    if (mention.end <= editStart) return true;
-
-                    if (mention.start >= editEnd) {
-                        mention.start += delta;
-                        mention.end += delta;
-                        return true;
+                const project = ({ start, end }) => this._mentions.flatMap((mention) => {
+                    if (mention.end <= start) {
+                        return [{ mention, start: mention.start, end: mention.end }];
                     }
-
-                    return false;
+                    if (mention.start >= end) {
+                        return [{
+                            mention,
+                            start: mention.start + delta,
+                            end: mention.end + delta,
+                        }];
+                    }
+                    return [];
                 });
+
+                const primary = project(this._resolveEdit(
+                    previousText, text, trustedEdit ? edit : null
+                ));
+
+                if (trustedEdit) {
+                    this._mentions = primary.map(({ mention, start, end }) => ({
+                        ...mention, start, end,
+                    }));
+                } else {
+                    // Without a trustworthy beforeinput range, identical text can
+                    // match different original mentions. Keep metadata only if
+                    // both possible edit alignments preserve the same source.
+                    const alternate = project(this._resolveEditFromEnd(previousText, text));
+                    this._mentions = primary
+                        .filter((item) => alternate.some((candidate) =>
+                            candidate.mention === item.mention &&
+                            candidate.start === item.start &&
+                            candidate.end === item.end
+                        ))
+                        .map(({ mention, start, end }) => ({ ...mention, start, end }));
+                }
             }
 
             this._mentions = this._mentions.filter((mention) => (
@@ -698,6 +726,30 @@
         clear() {
             this._mentions = [];
             this.acknowledge('');
+        }
+
+        _resolveEditFromEnd(previousText, text) {
+            const previousLength = previousText.length;
+            const currentLength = text.length;
+            let suffix = 0;
+            while (
+                suffix < previousLength &&
+                suffix < currentLength &&
+                previousText[previousLength - 1 - suffix] === text[currentLength - 1 - suffix]
+            ) {
+                suffix++;
+            }
+
+            let prefix = 0;
+            while (
+                prefix < previousLength - suffix &&
+                prefix < currentLength - suffix &&
+                previousText[prefix] === text[prefix]
+            ) {
+                prefix++;
+            }
+
+            return { start: prefix, end: previousLength - suffix };
         }
 
         _resolveEdit(previousText, text, edit) {
