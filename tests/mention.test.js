@@ -5060,7 +5060,7 @@ describe('MentionJS optional multi-word mention searches', () => {
 
     it('normalizes browser-inserted NBSP before calling a contenteditable search', async () => {
         const editor = document.createElement('div');
-        editor.contentEditable = 'true';
+        editor.setAttribute('contenteditable', 'true');
         editor.innerHTML =
             '<span class="mention active" data-mentionjs-token="true">@Anna\u00A0Iva</span>';
         document.body.appendChild(editor);
