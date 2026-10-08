@@ -3097,7 +3097,7 @@ describe('MentionJS non-cancelable beforeinput safety', () => {
         input(editor);
 
         expect(editor.textContent).toBe('@');
-        expect(editor.querySelectorAll('span')).toHaveLength(0);
+        expect(editor.querySelectorAll('span.mention.active')).toHaveLength(1);
 
         mention.destroy();
     });
@@ -4055,6 +4055,102 @@ describe('MentionJS committed identity and atomic insertion regressions', () => 
         expect(editor.querySelector('.mention')).toBeNull();
         expect(editor.textContent).toBe('@a ');
         expect(searchFunction).not.toHaveBeenCalled();
+        mention.destroy();
+    });
+});
+
+describe('MentionJS dismissed search and native trigger recovery', () => {
+    it('does not restart a dismissed textarea token until the trigger is deleted', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, { searchFunction, debounceDelay: 0 });
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown')).not.toBeNull());
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', bubbles: true, cancelable: true,
+        }));
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+
+        textarea.value = '@ab';
+        textarea.setSelectionRange(3, 3);
+        input(textarea);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(searchFunction).toHaveBeenCalledTimes(1);
+
+        textarea.value = '';
+        textarea.setSelectionRange(0, 0);
+        input(textarea);
+
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => expect(searchFunction).toHaveBeenCalledTimes(2));
+        mention.destroy();
+    });
+
+    it('lets Tab move focus when no matching results exist', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, { searchFunction: async () => [] });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown')).not.toBeNull());
+
+        const event = new KeyboardEvent('keydown', {
+            key: 'Tab', bubbles: true, cancelable: true,
+        });
+        textarea.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('adopts a browser-inserted trigger after non-cancelable beforeinput', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction });
+        editor.focus();
+        setCaret(editor, 0);
+        const event = new InputEvent('beforeinput', {
+            bubbles: true, cancelable: false, inputType: 'insertText', data: '@',
+        });
+        editor.dispatchEvent(event);
+
+        editor.textContent = '@';
+        setCaret(editor.firstChild, 1);
+        input(editor);
+        await vi.waitFor(() => expect(editor.querySelector('span.mention.active')).not.toBeNull());
+        expect(editor.textContent).toBe('@');
+        expect(searchFunction).toHaveBeenCalledWith('', null);
+        mention.destroy();
+    });
+
+    it('does not adopt a native trigger embedded in ordinary text', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.textContent = 'hello';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        editor.focus();
+        setCaret(editor.firstChild, 5);
+        editor.dispatchEvent(new InputEvent('beforeinput', {
+            bubbles: true, cancelable: false, inputType: 'insertText', data: '@',
+        }));
+        editor.firstChild.textContent = 'hello@';
+        setCaret(editor.firstChild, 6);
+        input(editor);
+
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.textContent).toBe('hello@');
         mention.destroy();
     });
 });

@@ -791,6 +791,8 @@
             this._mentionCounter = 0;
             this._suppressNextInput = false;
             this._suppressSyntheticContentEditableInput = false;
+            this._nativeTriggerPending = false;
+            this._dismissedTextareaStart = null;
             this._destroyed = false;
 
             this._h = {};
@@ -1054,6 +1056,17 @@
             const hasSelection = this._el.selectionStart !== this._el.selectionEnd;
             const token = hasSelection ? null : this._findTokenAtCursor(this._el.value, pos);
 
+            // Escape dismisses this token until its trigger is removed.
+            if (this._dismissedTextareaStart !== null) {
+                const start = this._dismissedTextareaStart;
+                if (this._el.value.slice(start, start + this._opts.trigger.length) !== this._opts.trigger) {
+                    this._dismissedTextareaStart = null;
+                } else if (token?.start === start) {
+                    this._closeDropdown();
+                    return;
+                }
+            }
+
             if (token) {
                 this._mentionStart = token.start;
                 this._mentionEnd = token.end;
@@ -1072,6 +1085,7 @@
         _onTextareaKeydown(e) {
             if (e.key === 'Escape' && (this._ui.el || this._mentionStart !== null)) {
                 e.preventDefault();
+                this._dismissedTextareaStart = this._mentionStart;
                 this._closeDropdown();
                 return;
             }
@@ -1079,7 +1093,10 @@
             if (!this._ui.el) return;
 
             if (this._searchSession.items.length === 0) {
-                if (['Enter', 'Tab', 'Escape'].includes(e.key)) {
+                if (e.key === 'Tab') {
+                    // No candidate to accept: keep normal form focus traversal.
+                    this._closeDropdown();
+                } else if (e.key === 'Enter' || e.key === 'Escape') {
                     e.preventDefault();
                     this._closeDropdown();
                 }
@@ -1128,6 +1145,7 @@
         }
 
         async _onBeforeInput(e) {
+            this._nativeTriggerPending = false;
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
@@ -1136,8 +1154,13 @@
                 return;
             }
 
-            if (e.data === this._opts.trigger) {
-                if (!this._canInsertMentionHere(sel) || !e.cancelable) return;
+            if (e.inputType === 'insertText' && e.data === this._opts.trigger) {
+                if (!this._canInsertMentionHere(sel)) return;
+                if (!e.cancelable) {
+                    // Let the browser insert normally; adopt its trigger on input.
+                    this._nativeTriggerPending = true;
+                    return;
+                }
                 e.preventDefault();
                 const newSpan = this._insertMentionSpan(sel);
                 this._mentionSpan = newSpan;
@@ -1157,10 +1180,25 @@
         async _onContentEditableInput() {
             if (this._suppressSyntheticContentEditableInput) return;
 
+            const pendingNativeTrigger = this._nativeTriggerPending;
+            this._nativeTriggerPending = false;
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
             if (!span) {
+                if (pendingNativeTrigger) {
+                    const adopted = this._adoptNativeTriggerAtCaret(sel);
+                    if (adopted) {
+                        const items = await this._search('');
+                        if (items === null) return;
+                        if (items === SEARCH_FAILED) {
+                            this._closeDropdown();
+                            return;
+                        }
+                        this._openDropdownForSpan(items, adopted);
+                        return;
+                    }
+                }
                 if (this._ui.el || this._mentionSpan) this._closeDropdown();
                 return;
             }
@@ -1866,6 +1904,40 @@
             return charBefore === null || /[\s\u00A0]/.test(charBefore);
         }
 
+        _adoptNativeTriggerAtCaret(sel) {
+            if (!sel?.isCollapsed || !this._isHostFocused()) return null;
+            const node = sel.anchorNode;
+            const offset = sel.anchorOffset;
+            const trigger = this._opts.trigger;
+            if (node?.nodeType !== Node.TEXT_NODE || offset < trigger.length ||
+                node.textContent.slice(offset - trigger.length, offset) !== trigger) {
+                return null;
+            }
+
+            const boundary = document.createRange();
+            boundary.setStart(node, offset - trigger.length);
+            boundary.collapse(true);
+            const before = this._charBeforeCaret({
+                rangeCount: 1,
+                getRangeAt: () => boundary,
+            });
+            if (before !== null && !/[\s\u00A0]/u.test(before)) return null;
+
+            const range = document.createRange();
+            range.setStart(node, offset - trigger.length);
+            range.setEnd(node, offset);
+            range.deleteContents();
+
+            const span = createElement('span', 'mention active');
+            span.dataset.mentionjsToken = 'true';
+            span.id = 'mjs-' + this._instanceId + '-' + (++this._mentionCounter);
+            span.textContent = trigger;
+            range.insertNode(span);
+            setCaretAt(span.firstChild, trigger.length);
+            this._mentionSpan = span;
+            return span;
+        }
+
         _insertMentionSpan(sel) {
             const range = sel.getRangeAt(0);
             range.deleteContents();
@@ -2008,6 +2080,7 @@
         }
 
         _closeDropdown() {
+            this._nativeTriggerPending = false;
             this._searchSession.cancel();
             this._setExpanded(false);
 
@@ -2210,6 +2283,7 @@
             if (this._ui.el || this._mentionStart !== null || this._mentionSpan) {
                 this._closeDropdown();
             }
+            this._dismissedTextareaStart = null;
 
             if (this._isTextarea) {
                 this._textareaMentions.reconcile(this._el.value);
@@ -2318,6 +2392,7 @@
             this._assertAlive();
 
             if (this._isTextarea) {
+                this._dismissedTextareaStart = null;
                 this._el.value = '';
                 this._textareaMentions.clear();
             } else {
@@ -2333,6 +2408,7 @@
             if (this._destroyed) return;
 
             this._closeDropdown();
+            this._dismissedTextareaStart = null;
             this._unbindElementEvents();
             this._unbindDocumentClick();
             this._restoreAccessibility();
