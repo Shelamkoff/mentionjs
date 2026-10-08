@@ -4237,7 +4237,7 @@ describe('MentionJS explicit asynchronous and programmatic contracts', () => {
 
 describe('MentionJS Unicode fallback and numeric identifier boundaries', () => {
     it('supports combining marks and compound emoji without Intl.Segmenter', () => {
-        const source = readFileSync(new URL('../mention.js', import.meta.url), 'utf8');
+        const source = readFileSync('mention.js', 'utf8');
         const sandbox = {
             module: { exports: {} }, exports: {},
             Intl: { Segmenter: undefined },
