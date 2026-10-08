@@ -4948,3 +4948,34 @@ describe('MentionJS selection spanning a cancelled token', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS backwards selection during token cleanup', () => {
+    it('keeps the selection anchor and focus orientation after unwrapping', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@al</span> tail';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        const span = editor.querySelector('span.mention');
+        const tail = span.nextSibling;
+        mention._mentionSpan = span;
+        mention._bindSelectionChange();
+        editor.focus();
+
+        const selection = window.getSelection();
+        expect(typeof selection.setBaseAndExtent).toBe('function');
+        selection.setBaseAndExtent(tail, 3, span.firstChild, 1);
+        expect(selection.toString()).toBe('al ta');
+        expect(selection.anchorNode).toBe(tail);
+
+        document.dispatchEvent(new Event('selectionchange'));
+
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(selection.toString()).toBe('al ta');
+        expect(selection.anchorNode).toBe(tail);
+        expect(selection.anchorOffset).toBe(3);
+        expect(selection.focusNode).toBe(editor.firstChild);
+        expect(selection.focusOffset).toBe(1);
+        mention.destroy();
+    });
+});
