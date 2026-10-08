@@ -707,6 +707,47 @@ try {
         'Editing a committed mention did not retain an active span: ' + JSON.stringify(reedit));
 
 
+    // 10b. After editing a committed mention with Backspace, subsequent
+    // native typing must keep the same active span and resume suggestions.
+    await sendKeys('xy');
+    await waitFor(
+        () => execute("return !!document.querySelector('#editor span.mention.active') && !!document.querySelector('.mention-dropdown.active')"),
+        Boolean,
+        'Typing after deleting inside a mention dropped the editable span'
+    );
+    const afterReeditTyping = await execute(`
+        const editor = document.getElementById('editor');
+        const active = editor.querySelector('span.mention.active');
+        const selection = window.getSelection();
+        return {
+            html: editor.innerHTML,
+            text: editor.textContent,
+            token: active?.textContent ?? null,
+            committed: window.__instance.getMentions(),
+            focused: document.activeElement?.id ?? null,
+            caretParent: selection.anchorNode?.parentElement?.tagName ?? null,
+            caretOffset: selection.anchorOffset,
+            trace: window.__typingTrace.slice(-28),
+        };
+    `);
+    assert(afterReeditTyping.token.includes('xy') &&
+        afterReeditTyping.committed.length === 0 &&
+        afterReeditTyping.focused === 'editor' &&
+        afterReeditTyping.caretParent === 'SPAN',
+        'Native typing after Backspace broke rich-text mention: ' +
+        JSON.stringify(afterReeditTyping));
+    await sendKeys('\uE007');
+    const recommitted = await execute(`
+        return {
+            mentions: window.__instance.getMentions(),
+            span: document.querySelector('#editor span[data-mention-id]')?.outerHTML ?? null,
+        };
+    `);
+    assert(recommitted.mentions.length === 1 &&
+        recommitted.mentions[0].id === '1',
+        'Edited mention could not be selected a second time: ' +
+        JSON.stringify(recommitted));
+
     // 11. The published demo opts in to multi-word queries in both editors.
     await request(base + '/url', 'POST', { url: demoUrl });
     await waitFor(
