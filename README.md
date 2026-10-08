@@ -34,7 +34,6 @@ const mention = new MentionJS(document.getElementById('editor'), {
     debounceDelay: 300,
     noResultsText: 'Not found',
     provideSearchContext: true,
-    allowSpacesInQuery: true, // Optional: search full names like "Anna Ivanova"
     searchFunction: async (query, nextPageUrl, context = {}) => {
         const url = nextPageUrl || `/api/users?q=${encodeURIComponent(query)}`;
         const res = await fetch(url, { signal: context.signal });
@@ -96,7 +95,7 @@ const m = new MentionJS(element, options);
 | `searchFunction` | `SearchFunction` | `null` | Async search function (see below) |
 | `provideSearchContext` | `boolean` | `false` | Always pass the optional third search callback argument for callbacks with default/rest parameters |
 | `emitInputOnProgrammaticChange` | `boolean` | `false` | Dispatch `input` after `push()` and `clear()` (opt-in for backwards compatibility) |
-| `allowSpacesInQuery` | `boolean` | `false` | Keep an active search across spaces in names, e.g. `@Anna Ivanova`; line breaks and tabs still end the query |
+| `allowSpacesInQuery` | `boolean` | `true` in contenteditable; `false` in textarea | Keep an active search across spaces in names, e.g. `@Anna Ivanova`; line breaks and tabs still end the query |
 | `debounceDelay` | `number` | `300` | Debounce delay in ms for non-empty queries |
 | `noResultsText` | `string` | `'No results found'` | Text shown when search returns no items |
 | `dropdownClass` | `string` | `''` | Additional CSS class for the dropdown container |
@@ -137,7 +136,7 @@ You may also return a plain array of items (without pagination).
 
 Empty-string queries (`query === ''`) are executed immediately (no debounce) to show the initial list when the trigger character is typed.
 
-By default, a whitespace character ends the search and releases an unfinished mention span. Set `allowSpacesInQuery: true` to search multi-word names without losing the active mention when typing a space. In `contenteditable`, native non-breaking spaces (NBSP) are normalized to regular spaces before calling `searchFunction`. With this option enabled, a space **does not** finish the search: select a result with Enter, Tab, or click; use Escape or move the caret out to cancel. Newlines and tabs still terminate the query.
+To retain the original v1 behavior, **contenteditable searches accept spaces by default**, while **textarea searches end at whitespace by default**. Override either mode with `allowSpacesInQuery: true` or `false`. In contenteditable, browser-inserted non-breaking spaces (NBSP) are passed to `searchFunction` as ordinary spaces. With multi-word search enabled, a space does not end the token: choose a result with Enter, Tab, or click, or press Escape / move the caret outside to cancel. Newlines and tabs still terminate the query.
 
 `context.signal` is aborted for an **in-flight request** when it is superseded, the dropdown closes, or the instance is destroyed. A request that has already completed is not retroactively aborted. Existing search functions accepting only `query` or `(query, nextPageUrl)` remain compatible. Set `provideSearchContext: true` to receive the third argument in a callback with default or rest parameters (which report a smaller JavaScript `function.length`).
 

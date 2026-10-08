@@ -20,7 +20,7 @@
         searchFunction: null,
         provideSearchContext: false,
         emitInputOnProgrammaticChange: false,
-        allowSpacesInQuery: false,
+        allowSpacesInQuery: undefined,
         debounceDelay: 300,
         noResultsText: 'No results found',
         dropdownClass: '',
@@ -849,6 +849,12 @@
             }
 
             this._opts = Object.assign({}, DEFAULTS, options);
+            // Preserve the v1 search boundary behavior:
+            // rich text accepts spaces in a person's name, textarea ends
+            // at whitespace unless the caller explicitly opts in.
+            if (this._opts.allowSpacesInQuery === undefined) {
+                this._opts.allowSpacesInQuery = !isTextarea;
+            }
 
             if (
                 typeof this._opts.trigger !== 'string' ||

@@ -34,7 +34,6 @@ const mention = new MentionJS(document.getElementById('editor'), {
     debounceDelay: 300,
     noResultsText: 'Никого не найдено',
     provideSearchContext: true,
-    allowSpacesInQuery: true, // Необязательно: поиск «Анна Иванова» с пробелом
     searchFunction: async (query, nextPageUrl, context = {}) => {
         const url = nextPageUrl || `/api/users?q=${encodeURIComponent(query)}`;
         const res = await fetch(url, { signal: context.signal });
@@ -96,7 +95,7 @@ const m = new MentionJS(element, options);
 | `searchFunction` | `SearchFunction` | `null` | Асинхронная функция поиска (см. ниже) |
 | `provideSearchContext` | `boolean` | `false` | Передавать третий аргумент поиска для функций с параметрами по умолчанию или rest |
 | `emitInputOnProgrammaticChange` | `boolean` | `false` | Отправлять событие `input` после `push()` и `clear()` (по умолчанию сохранено старое поведение) |
-| `allowSpacesInQuery` | `boolean` | `false` | Не завершать поиск по пробелу; позволяет искать полные имена, например `@Анна Иванова` |
+| `allowSpacesInQuery` | `boolean` | `true` для contenteditable; `false` для textarea | Не завершать поиск по пробелу; позволяет искать полные имена, например `@Анна Иванова` |
 | `debounceDelay` | `number` | `300` | Задержка debounce в мс для непустых запросов |
 | `noResultsText` | `string` | `'No results found'` | Текст при пустом результате поиска |
 | `dropdownClass` | `string` | `''` | Дополнительный CSS-класс для контейнера дропдауна |
@@ -137,7 +136,7 @@ type SearchFunction = (
 
 Пустые запросы (`query === ''`) выполняются без debounce, чтобы сразу показать список при вводе триггер-символа.
 
-По умолчанию пробел завершает поиск, а незавершённый mention-span преобразуется в обычный текст. При `allowSpacesInQuery: true` поиск продолжается после пробела — можно ввести полное имя, например `@Анна Иванова`. Неразрывные пробелы (NBSP), которые браузер может вставить в `contenteditable`, передаются поисковой функции как обычные пробелы. В этом режиме поиск завершается выбором результата (Enter, Tab или клик), отменой (Escape), уходом каретки из упоминания или вводом перевода строки/табуляции.
+Для сохранения поведения исходной v1 **в contenteditable поиск по умолчанию продолжается после пробела**, а **в textarea пробел завершает поиск**. Для любого режима это можно переопределить настройкой `allowSpacesInQuery: true` или `false`. Неразрывные пробелы (NBSP), которые браузер может вставить в `contenteditable`, передаются функции поиска как обычные пробелы. При многословном поиске выберите результат через Enter, Tab или клик; Escape и уход каретки из span отменяют поиск, а перевод строки и табуляция завершают токен.
 
 `context.signal` отменяется у **ещё выполняющегося запроса** при смене запроса, закрытии дропдауна или уничтожении экземпляра. Уже завершившийся запрос не отменяется задним числом. Старые функции с аргументами `query` или `(query, nextPageUrl)` остаются совместимыми. Для функций с параметрами по умолчанию или rest установите `provideSearchContext: true`: третий аргумент будет передан даже при меньшем значении JavaScript `function.length`.
 

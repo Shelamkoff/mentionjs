@@ -5138,3 +5138,78 @@ describe('MentionJS blur does not regain selection focus', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS v1-compatible default word boundaries', () => {
+    it('defaults contenteditable to multi-word search, unlike textarea', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        const textarea = document.createElement('textarea');
+        document.body.append(editor, textarea);
+        const rich = new MentionJS(editor);
+        const plain = new MentionJS(textarea);
+        expect(rich._opts.allowSpacesInQuery).toBe(true);
+        expect(plain._opts.allowSpacesInQuery).toBe(false);
+        rich.destroy();
+        plain.destroy();
+    });
+
+    it('retains the active contenteditable span after typing a space by default', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML =
+            '<span class="mention active" data-mentionjs-token="true">@Anna\u00A0Iv</span>';
+        document.body.appendChild(editor);
+        const span = editor.firstChild;
+        const searchFunction = vi.fn().mockResolvedValue([{ id: 1, name: 'Anna Ivanova' }]);
+        const mention = new MentionJS(editor, {
+            debounceDelay: 0, searchFunction,
+        });
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+        await vi.waitFor(() => expect(searchFunction).toHaveBeenCalledWith('Anna Iv', null));
+        expect(span.isConnected).toBe(true);
+        expect(span.classList.contains('active')).toBe(true);
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('allows explicit single-word search in contenteditable', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML =
+            '<span class="mention active" data-mentionjs-token="true">@Anna\u00A0Iv</span>';
+        document.body.appendChild(editor);
+        const span = editor.firstChild;
+        const searchFunction = vi.fn();
+        const mention = new MentionJS(editor, {
+            allowSpacesInQuery: false, searchFunction,
+        });
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+        input(editor);
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.textContent).toBe('@Anna\u00A0Iv');
+        expect(searchFunction).not.toHaveBeenCalled();
+        mention.destroy();
+    });
+
+    it('permits explicitly enabling multi-word searches in textarea', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(textarea, {
+            allowSpacesInQuery: true, debounceDelay: 0, searchFunction,
+        });
+        textarea.focus();
+        textarea.value = '@Anna Iv';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+        await vi.waitFor(() =>
+            expect(searchFunction).toHaveBeenCalledWith('Anna Iv', null)
+        );
+        mention.destroy();
+    });
+});

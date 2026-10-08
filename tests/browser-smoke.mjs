@@ -648,7 +648,7 @@ try {
         document.addEventListener('selectionchange', () => snapshot('selectionchange'));
         window.__instance = new MentionJS(editor, {
             debounceDelay: 30,
-            allowSpacesInQuery: true,
+            // Unconfigured contenteditable must keep v1 multi-word search.
             searchFunction: async (query) => {
                 await new Promise(resolve => setTimeout(resolve, 85));
                 return query.toLowerCase().startsWith('anna')
