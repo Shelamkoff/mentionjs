@@ -5,7 +5,7 @@
 Lightweight @-mention autocomplete for `<textarea>` and `contenteditable`.
 No dependencies. ~10 KB gzipped. TypeScript definitions included.
 
-**[Interactive demo](https://shelamkoff.github.io/mentionjs/)** ([direct link](https://shelamkoff.github.io/mentionjs/demo.html))
+**[Interactive demo](https://shelamkoff.github.io/mentionjs/)**
 
 ## Features
 
@@ -282,8 +282,7 @@ Import `mention.css` for default styles. All classes are customizable:
 | `mention.d.ts` | TypeScript type definitions |
 | `dist/mention.min.js` | Generated minified JS (`npm run build` / `prepack`) |
 | `dist/mention.min.css` | Generated minified CSS (`npm run build` / `prepack`) |
-| `demo.html` | Interactive demo page |
-| `index.html` | GitHub Pages root entrypoint (redirects to the demo) |
+| `index.html` | Interactive demo and GitHub Pages root entrypoint |
 | `.nojekyll` | Disables Jekyll processing for the static site |
 | `.github/workflows/ci.yml` | Tests and build checks |
 | `.github/workflows/pages.yml` | GitHub Pages deployment after successful CI |
@@ -307,6 +306,6 @@ MIT
 
 ## Demo deployment
 
-`demo.html` uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. `index.html` provides a GitHub Pages root entrypoint.
+`index.html` is the interactive demo and uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. `index.html` provides a GitHub Pages root entrypoint.
 
 The **Deploy demo to Pages** workflow publishes the demo and minified JS/CSS **after a successful CI run triggered by a push to `main`**. The [GitHub Pages site](https://shelamkoff.github.io/mentionjs/) has been deployed successfully. Pages uses **Settings → Pages → Build and deployment → Source: GitHub Actions**; no `gh-pages` branch is required.

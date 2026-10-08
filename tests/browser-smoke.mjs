@@ -565,8 +565,8 @@ try {
 
 
     // 9. Exercise the interactive demo, not just the isolated library fixture.
-    const demoUrl = pathToFileURL(resolve(process.cwd(), 'demo.html')).href;
-    await request(base + '/url', 'POST', { url: demoUrl });
+    const siteUrl = pathToFileURL(resolve(process.cwd(), 'index.html')).href;
+    await request(base + '/url', 'POST', { url: siteUrl });
     await waitFor(
         () => execute("return document.documentElement.dataset.demoReady === 'true' && typeof window.MentionJS === 'function';"),
         Boolean, 'Interactive demo did not initialize'
@@ -928,7 +928,7 @@ try {
     }
 
     // 11. The published demo opts in to multi-word queries in both editors.
-    await request(base + '/url', 'POST', { url: demoUrl });
+    await request(base + '/url', 'POST', { url: siteUrl });
     await waitFor(
         () => execute("return document.documentElement.dataset.demoReady === 'true'"),
         Boolean, 'Demo not ready for full-name queries'

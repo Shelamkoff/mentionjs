@@ -37,17 +37,16 @@ jobs:
       - name: Stage the static site
         run: |
           mkdir -p _site/dist
-          cp index.html demo.html mention.js mention.css .nojekyll _site/
+          cp index.html mention.js mention.css .nojekyll _site/
           cp dist/mention.min.js dist/mention.min.css dist/mention.d.ts _site/dist/
           # Use the exact successfully tested revision for Pages asset URLs.
           # This avoids mixing newly deployed demo HTML with cached old JS.
           REV="${{ github.event.workflow_run.head_sha }}"
           sed -i -e "s|href=\"mention.css\"|href=\"mention.css?v=$REV\"|" \
-                 -e "s|src=\"mention.js\"|src=\"mention.js?v=$REV\"|" _site/demo.html
-          grep -F "mention.css?v=$REV" _site/demo.html
-          grep -F "mention.js?v=$REV" _site/demo.html
+                 -e "s|src=\"mention.js\"|src=\"mention.js?v=$REV\"|" _site/index.html
+          grep -F "mention.css?v=$REV" _site/index.html
+          grep -F "mention.js?v=$REV" _site/index.html
           test -s _site/index.html
-          test -s _site/demo.html
           test -s _site/mention.js
           test -s _site/dist/mention.min.js
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
