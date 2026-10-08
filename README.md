@@ -142,7 +142,7 @@ To retain the original v1 behavior, **contenteditable searches accept spaces by 
 
 ### Render Functions
 
-All render functions are optional. When provided, they must return an `HTMLElement`. If they return a falsy value, the default rendering is used as a fallback.
+All render functions are optional and should return an `HTMLElement`. A falsy return value or a thrown error falls back to the default renderer; thrown errors are logged as warnings rather than interrupting the dropdown or pagination.
 
 **renderItem(data, index, isActive)**
 
@@ -302,6 +302,8 @@ MIT
 ## Trust Boundary
 
 `contenteditable` can import pre-existing mention spans carrying `data-mention-id` and `data-mention-name`. Such markup is treated as application-provided metadata, not as an authenticated identity. Sanitize untrusted HTML before inserting it into an editing host and validate mention IDs server-side before performing privileged actions. Custom render functions are also responsible for safe handling of untrusted content.
+
+Directly rewriting `contenteditable` HTML through browser editing commands or external DOM operations can bypass `beforeinput`. If the visible content of a committed span changes, MentionJS conservatively invalidates that span's identity. Use the public API for mention insertion and validate IDs rather than assuming text-matched identities survive arbitrary HTML rewrites.
 
 ## Demo deployment
 
