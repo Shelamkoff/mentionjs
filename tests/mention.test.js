@@ -5448,3 +5448,21 @@ describe('MentionJS native boundary marker cleanup', () => {
         expect(editor.textContent.includes('\u200B')).toBe(false);
     });
 });
+
+describe('MentionJS canceled native input leaves no hidden boundary marker', () => {
+    it('cleans up the marker if a later beforeinput listener cancels insertion', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Bob' });
+        editor.focus();
+        setCaret(editor, 0);
+        editor.addEventListener('beforeinput', (e) => e.preventDefault());
+        const event = beforeInput(editor, 'insertText', 'x');
+        expect(event.defaultPrevented).toBe(true);
+        await vi.waitFor(() => expect(editor.textContent.includes('\u200B')).toBe(false));
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Bob' }]);
+        mention.destroy();
+    });
+});

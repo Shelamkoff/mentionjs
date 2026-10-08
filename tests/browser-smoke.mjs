@@ -1362,6 +1362,48 @@ try {
         'Native undo/redo after typing before mention is broken: ' +
         JSON.stringify(boundaryUndoCases));
 
+
+    // Long and Unicode input at the saved-mention boundary must leave no
+    // transient marker behind and must preserve the original mention ID.
+    const nativeBoundaryTyping = [];
+    for (const typing of ['hello', '😊', ' @']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        await execute(`
+            const editor = document.getElementById('editor');
+            editor.focus();
+            window.__instance = new MentionJS(editor, {
+                searchFunction: async () => [{ id: 'new', name: 'New Person' }],
+            });
+            window.__instance.push({ id: 'saved', name: 'Bob' });
+            const sel = window.getSelection(), range = document.createRange();
+            range.setStart(editor, 0);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        `);
+        await sendKeys(typing);
+        const snapshot = await execute(`
+            const editor = document.getElementById('editor');
+            return {
+                html: editor.innerHTML,
+                text: editor.textContent,
+                saved: window.__instance.getMentions(),
+                original: [...editor.querySelectorAll('span[data-mention-id]')]
+                    .find(span => span.dataset.mentionId === 'saved')?.textContent ?? null,
+                focus: document.activeElement?.id ?? null,
+            };
+        `);
+        nativeBoundaryTyping.push({ typing, snapshot });
+    }
+    assert(nativeBoundaryTyping.every(({ typing, snapshot }) =>
+        snapshot.original === '@Bob' &&
+        snapshot.saved.some(m => m.id === 'saved' && m.name === 'Bob') &&
+        !snapshot.text.includes('\u200B') &&
+        snapshot.focus === 'editor' &&
+        snapshot.text.startsWith(typing + '@Bob')
+    ), 'Long/Unicode input before saved mention invalidated metadata: ' +
+        JSON.stringify(nativeBoundaryTyping));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
