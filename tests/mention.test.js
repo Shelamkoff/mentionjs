@@ -5215,3 +5215,73 @@ describe('MentionJS v1-compatible default word boundaries', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS text insertion before a committed inline mention', () => {
+    for (const caretMode of ['text-start', 'span-start', 'host-boundary']) {
+        it('keeps a committed mention when typing a space and a character at ' + caretMode, () => {
+            const editor = document.createElement('div');
+            editor.setAttribute('contenteditable', 'true');
+            document.body.appendChild(editor);
+            const mention = new MentionJS(editor);
+            mention.push({ id: 'original', name: 'Anna Ivanova' });
+            const span = editor.querySelector('span.mention[data-mention-id]');
+            editor.focus();
+
+            if (caretMode === 'text-start') {
+                setCaret(span.firstChild, 0);
+            } else if (caretMode === 'span-start') {
+                setCaret(span, 0);
+            } else {
+                setCaret(editor, 0);
+            }
+            const space = beforeInput(editor, 'insertText', ' ');
+            expect(space.defaultPrevented).toBe(true);
+            expect(mention.getMentions()).toEqual([
+                { id: 'original', name: 'Anna Ivanova' },
+            ]);
+            expect(span.isConnected).toBe(true);
+
+            const character = beforeInput(editor, 'insertText', 'x');
+            expect(character.defaultPrevented).toBe(true);
+            expect(editor.textContent.startsWith(' x@Anna Ivanova')).toBe(true);
+            expect(editor.querySelector('span.mention[data-mention-id]')).toBe(span);
+            expect(mention.getMentions()).toEqual([
+                { id: 'original', name: 'Anna Ivanova' },
+            ]);
+            mention.destroy();
+        });
+    }
+
+    it('does not intercept unrelated text outside any committed mention', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.textContent = 'hello world';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        editor.focus();
+        setCaret(editor.firstChild, 4);
+        const event = beforeInput(editor, 'insertText', 'x');
+        expect(event.defaultPrevented).toBe(false);
+        mention.destroy();
+    });
+
+    it('keeps the original mention ID when typing inside preceding plain text', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 7, name: 'Anna Ivanova' });
+        const span = editor.querySelector('span.mention');
+        const prefix = document.createTextNode('hello');
+        span.before(prefix);
+        editor.focus();
+        setCaret(prefix, 2);
+        const inserted = beforeInput(editor, 'insertText', 'x');
+        expect(inserted.defaultPrevented).toBe(true);
+        expect(prefix.textContent).toBe('hexllo');
+        expect(mention.getMentions()).toEqual([
+            { id: '7', name: 'Anna Ivanova' },
+        ]);
+        mention.destroy();
+    });
+});

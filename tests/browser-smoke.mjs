@@ -1071,7 +1071,7 @@ try {
     }
     assert(beforeTriggerCases.every((c) =>
         c.afterSpace.mentions.length === 1 &&
-        c.afterSpace.savedId !== null || c.afterSpace.mentions.length === 1
+        c.afterSpace.mentions[0].id === '1'
     ), 'Inserting a space before a committed mention loses the mention: ' +
         JSON.stringify(beforeTriggerCases));
     assert(beforeTriggerCases.every((c) =>
@@ -1080,7 +1080,7 @@ try {
         c.afterTyping.savedId === '1' &&
         c.afterTyping.savedName === 'Anna Ivanova' &&
         c.afterTyping.spanText === '@Anna Ivanova' &&
-        c.afterTyping.text.startsWith(' x@Anna Ivanova')
+        /^[\s\u00A0]x@Anna Ivanova/u.test(c.afterTyping.text)
     ), 'Typing before the trigger invalidates the committed mention: ' +
         JSON.stringify(beforeTriggerCases));
 

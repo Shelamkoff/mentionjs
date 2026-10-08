@@ -1300,6 +1300,8 @@
                 return;
             }
 
+            if (this._insertTextBeforeCommittedMention(e, sel)) return;
+
             if (e.inputType === 'insertText' && e.data === this._opts.trigger) {
                 if (!this._canInsertMentionHere(sel)) return;
                 if (!e.cancelable) {
@@ -1321,6 +1323,58 @@
             } else {
                 this._closeDropdown();
             }
+        }
+
+        _insertTextBeforeCommittedMention(e, sel) {
+            // At an inline editing boundary, Chrome can absorb a normal text
+            // insertion into the adjacent committed span and strip its DOM
+            // metadata. Insert into the preceding text node instead.
+            if (!e.cancelable || !sel?.rangeCount || !sel.isCollapsed ||
+                !['insertText', 'insertReplacementText'].includes(e.inputType) ||
+                typeof e.data !== 'string' || e.data.length === 0 ||
+                e.data === this._opts.trigger) {
+                return false;
+            }
+
+            const range = sel.getRangeAt(0);
+            const container = range.startContainer;
+            const offset = range.startOffset;
+            if (container !== this._el && !this._el.contains(container)) return false;
+
+            let next;
+            if (container.nodeType === Node.TEXT_NODE) {
+                next = container.nextSibling;
+            } else if (container.nodeType === Node.ELEMENT_NODE) {
+                next = container.childNodes[offset];
+            } else {
+                return false;
+            }
+
+            const committed = this._isMentionSpan(next) &&
+                next.hasAttribute('data-mention-id') &&
+                next.hasAttribute('data-mention-name') &&
+                next.textContent === this._opts.trigger + next.dataset.mentionName;
+            if (!committed) return false;
+
+            e.preventDefault();
+
+            if (container.nodeType === Node.TEXT_NODE) {
+                container.insertData(offset, e.data);
+                setCaretAt(container, offset + e.data.length);
+            } else {
+                const previous = container.childNodes[offset - 1];
+                if (previous?.nodeType === Node.TEXT_NODE) {
+                    previous.appendData(e.data);
+                    setCaretAt(previous, previous.textContent.length);
+                } else {
+                    const textNode = document.createTextNode(e.data);
+                    container.insertBefore(textNode, next);
+                    setCaretAt(textNode, e.data.length);
+                }
+            }
+
+            this._dispatchContentEditableInput(e.inputType, e.data);
+            return true;
         }
 
         async _onContentEditableInput() {
