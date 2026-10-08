@@ -1088,7 +1088,7 @@ try {
     // Adjacent committed mentions, selected prefixes, and formatted paste:
     // mutating surrounding text must not invalidate unrelated IDs.
     const adjacencyCases = [];
-    for (const scenario of ['between-mentions', 'replace-prefix-selection', 'native-insert-html', 'before-mention-enter']) {
+    for (const scenario of ['between-mentions', 'replace-prefix-selection', 'external-html-insert', 'before-mention-enter']) {
         await request(base + '/url', 'POST', { url: fixtureUrl });
         const initial = await execute(`
             const editor = document.getElementById('editor');
@@ -1148,15 +1148,27 @@ try {
         } else if (scenario === 'before-mention-enter') {
             await sendKeys('\uE007'); // Enter at caret before mention
         } else {
-            // execCommand exercises a browser-owned rich HTML insertion path
-            // (similar to a formatted paste) without mocking a DOM mutation.
-            const supported = await execute(`
-                return document.execCommand('insertHTML', false, '<em>hello</em>');
+            // An external editor can insert formatted content using the
+            // standard Range API, then notify its host with an input event.
+            // No deprecated editing command or fake "native paste" claim.
+            await execute(`
+                const editor = document.getElementById('editor');
+                const selection = window.getSelection();
+                const range = selection.getRangeAt(0).cloneRange();
+                range.collapse(true);
+                const em = document.createElement('em');
+                em.textContent = 'hello';
+                range.insertNode(em);
+                range.setStartAfter(em);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editor.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertFromPaste',
+                    data: 'hello',
+                }));
             `);
-            if (!supported) {
-                adjacencyCases.push({ scenario, skipped: 'execCommand unsupported' });
-                continue;
-            }
         }
         const result = await execute(`
             const editor = document.getElementById('editor');
@@ -1178,17 +1190,12 @@ try {
     }
     assert(adjacencyCases.every(({ scenario, skipped, result }) => {
         if (skipped) return true;
-        if (scenario === 'native-insert-html') {
-            // execCommand('insertHTML') does not dispatch beforeinput.
-            // Firefox keeps the adjacent mention span intact; Chrome edits
-            // inside its span and conservatively invalidates the changed ID.
-            // Either outcome is safe: no stale ID may refer to changed text.
-            return (
-                result.mentions.length === 1 &&
+        if (scenario === 'external-html-insert') {
+            return result.mentions.length === 1 &&
                 result.spans.length === 1 &&
                 result.spans[0].id === 'right' &&
-                result.spans[0].text === '@Bob'
-            ) || (result.mentions.length === 0 && result.spans.length === 0);
+                result.spans[0].text === '@Bob' &&
+                result.html.includes('<em>hello</em>');
         }
         return result.mentions.length === (scenario === 'between-mentions' ? 2 : 1) &&
             result.spans.every(s => s.text === '@' + s.name) &&
@@ -1263,105 +1270,44 @@ try {
         }));
 
 
-    // Native undo/redo must retain the mention while reversing text typed
-    // immediately before it. Probe a selection-only native edit separately,
-    // without using that probe as the test oracle.
-    const boundaryUndoCases = [];
-    for (const mode of ['current']) {
-        await request(base + '/url', 'POST', { url: fixtureUrl });
-        await execute(`
-            const editor = document.getElementById('editor');
-            editor.focus();
-            window.__instance = new MentionJS(editor);
-            window.__instance.push({ id: 'persist', name: 'Bob' });
-            const range = document.createRange(), sel = window.getSelection();
-            range.setStart(editor, 0);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            if (arguments[0] === 'native-reposition') {
-                // Diagnostic: could the browser own the edit and undo stack
-                // if caret were moved to an adjacent text node before input?
-                window.__instance._insertTextBeforeCommittedMention = (e) => {
-                    if (e.inputType !== 'insertText') return false;
-                    const span = editor.querySelector('span.mention');
-                    const textNode = document.createTextNode('');
-                    span.before(textNode);
-                    const r = document.createRange();
-                    r.setStart(textNode, 0);
-                    r.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(r);
-                    return false;
-                };
-            }
-            if (arguments[0] === 'native-prefilled' ||
-                arguments[0].startsWith('exec-')) {
-                const mode = arguments[0];
-                window.__instance._insertTextBeforeCommittedMention = (e) => {
-                    if (e.inputType !== 'insertText' || window.__execInProgress) return false;
-                    const span = editor.querySelector('span.mention');
-                    const sentinel = mode === 'exec-nbsp' ? '\u00A0' :
-                        mode === 'exec-zwsp' ? '\u200B' :
-                        mode === 'native-prefilled' ? '~' : '';
-                    const node = document.createTextNode(sentinel);
-                    span.before(node);
-                    const r = document.createRange();
-                    r.setStart(node, 0);
-                    r.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(r);
-                    window.__boundarySentinel = node;
-                    window.__sentinelValue = sentinel;
-                    if (mode === 'native-prefilled') return false;
-                    e.preventDefault();
-                    window.__execInProgress = true;
-                    try {
-                        window.__execOk = document.execCommand('insertText', false, e.data);
-                    } catch (err) {
-                        window.__execError = String(err);
-                    } finally {
-                        window.__execInProgress = false;
-                    }
-                    return true;
-                };
-            }
-        `, [mode]);
-        const state = () => execute(`
-            const editor = document.getElementById('editor');
-            return {
-                text: editor.textContent,
-                html: editor.innerHTML,
-                mentions: window.__instance.getMentions(),
-            };
-        `);
-        await sendKeys('x');
-        await execute(`
-            const node = window.__boundarySentinel;
-            const value = window.__sentinelValue;
-            if (value && node?.isConnected) {
-                const index = node.textContent.indexOf(value);
-                if (index >= 0) node.deleteData(index, value.length);
-            }
-        `);
-        const inserted = await state();
-        await sendKeys('\uE009z\uE000');
-        const undone = await state();
-        await sendKeys('\uE009\uE008z\uE000');
-        const redone = await state();
-        const probeInfo = await execute("return { execOk: window.__execOk ?? null, execError: window.__execError ?? null, sentinel: window.__boundarySentinel?.textContent ?? null };");
-        boundaryUndoCases.push({ mode, inserted, undone, redone, probeInfo });
-    }
-    const undoCurrent = boundaryUndoCases[0];
-    assert(undoCurrent.inserted.text.startsWith('x@Bob') &&
-        undoCurrent.inserted.mentions.length === 1 &&
-        !undoCurrent.undone.text.startsWith('x@Bob') &&
-        undoCurrent.undone.mentions.length === 1 &&
-        undoCurrent.redone.text.startsWith('x@Bob') &&
-        undoCurrent.redone.mentions.length === 1,
-        'Native undo/redo after typing before mention is broken: ' +
-        JSON.stringify(boundaryUndoCases));
+    // Native Undo/Redo is exercised with actual browser keyboard input,
+    // not with a deprecated editing command or a monkey-patched method.
+    await request(base + '/url', 'POST', { url: fixtureUrl });
+    await execute(`
+        const editor = document.getElementById('editor');
+        editor.focus();
+        window.__instance = new MentionJS(editor);
+        window.__instance.push({ id: 'persist', name: 'Bob' });
+        const range = document.createRange();
+        range.setStart(editor, 0);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+    `);
+    const boundaryState = () => execute(`
+        const editor = document.getElementById('editor');
+        return {
+            text: editor.textContent,
+            html: editor.innerHTML,
+            mentions: window.__instance.getMentions(),
+        };
+    `);
+    await sendKeys('x');
+    const inserted = await boundaryState();
+    await sendKeys('\uE009z\uE000');
+    const undone = await boundaryState();
+    await sendKeys('\uE009\uE008z\uE000');
+    const redone = await boundaryState();
 
+    assert(inserted.text.startsWith('x@Bob') &&
+        inserted.mentions.length === 1 &&
+        !undone.text.startsWith('x@Bob') &&
+        undone.mentions.length === 1 &&
+        redone.text.startsWith('x@Bob') &&
+        redone.mentions.length === 1,
+        'Native undo/redo after typing before mention is broken: ' +
+        JSON.stringify({ inserted, undone, redone }));
 
     // Long and Unicode input at the saved-mention boundary must leave no
     // transient marker behind and must preserve the original mention ID.
