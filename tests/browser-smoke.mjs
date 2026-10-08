@@ -1179,10 +1179,16 @@ try {
     assert(adjacencyCases.every(({ scenario, skipped, result }) => {
         if (skipped) return true;
         if (scenario === 'native-insert-html') {
-            // execCommand('insertHTML') does NOT dispatch beforeinput and
-            // directly rewrites a saved span. Discarding its old ID is the
-            // conservative response to an external, ambiguous DOM rewrite.
-            return result.mentions.length === 0 && result.spans.length === 0;
+            // execCommand('insertHTML') does not dispatch beforeinput.
+            // Firefox keeps the adjacent mention span intact; Chrome edits
+            // inside its span and conservatively invalidates the changed ID.
+            // Either outcome is safe: no stale ID may refer to changed text.
+            return (
+                result.mentions.length === 1 &&
+                result.spans.length === 1 &&
+                result.spans[0].id === 'right' &&
+                result.spans[0].text === '@Bob'
+            ) || (result.mentions.length === 0 && result.spans.length === 0);
         }
         return result.mentions.length === (scenario === 'between-mentions' ? 2 : 1) &&
             result.spans.every(s => s.text === '@' + s.name) &&
