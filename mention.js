@@ -1981,6 +1981,20 @@
             if (captured?.endInside) {
                 captured.endOffset = textOffset(captured.endNode, captured.endOffset);
             }
+            const endpoints = selectedRange && sel.anchorNode && sel.focusNode && {
+                anchorNode: sel.anchorNode,
+                anchorOffset: sel.anchorOffset,
+                focusNode: sel.focusNode,
+                focusOffset: sel.focusOffset,
+                anchorInside: inside(sel.anchorNode),
+                focusInside: inside(sel.focusNode),
+            };
+            if (endpoints?.anchorInside) {
+                endpoints.anchorOffset = textOffset(endpoints.anchorNode, endpoints.anchorOffset);
+            }
+            if (endpoints?.focusInside) {
+                endpoints.focusOffset = textOffset(endpoints.focusNode, endpoints.focusOffset);
+            }
 
             const textNode = document.createTextNode(text);
             span.replaceWith(textNode);
@@ -1995,8 +2009,27 @@
                     captured.endInside ? textNode : captured.endNode,
                     captured.endOffset
                 );
-                sel.removeAllRanges();
-                sel.addRange(range);
+                let restored = false;
+                if (endpoints && typeof sel.setBaseAndExtent === 'function') {
+                    try {
+                        // Preserve the original anchor/focus direction, including
+                        // backwards selections extended with Shift + Arrow.
+                        sel.setBaseAndExtent(
+                            endpoints.anchorInside ? textNode : endpoints.anchorNode,
+                            endpoints.anchorOffset,
+                            endpoints.focusInside ? textNode : endpoints.focusNode,
+                            endpoints.focusOffset
+                        );
+                        restored = true;
+                    } catch (_) {
+                        // A stale external selection endpoint may have been
+                        // removed by another editor; use a normalized range.
+                    }
+                }
+                if (!restored) {
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
             }
 
             if (this._mentionSpan === span) this._mentionSpan = null;
