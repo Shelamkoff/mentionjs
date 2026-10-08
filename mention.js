@@ -2171,7 +2171,12 @@
             if (/\s/.test(query)) return null;
             if (triggerEnd + query.length !== position) return null;
 
-            return { start: triggerIdx, end: position, query };
+            // The query ends at the caret, but accepting a result must
+            // replace the whole token, including characters after the caret.
+            let end = position;
+            while (end < text.length && !/\s/u.test(text[end])) end++;
+
+            return { start: triggerIdx, end, query };
         }
 
         _openDropdownForSpan(items, span) {

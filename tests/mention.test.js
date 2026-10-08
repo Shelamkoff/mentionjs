@@ -4552,3 +4552,59 @@ describe('MentionJS element-boundary caret offsets', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS textarea replacement across the caret', () => {
+    it('replaces the whole uncommitted token when accepting from its middle', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const query = vi.fn().mockResolvedValue([{ id: 3, name: 'Bob' }]);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0, searchFunction: query,
+        });
+
+        textarea.focus();
+        textarea.value = 'hello @alice rest';
+        textarea.setSelectionRange(9, 9); // after @al
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(query).toHaveBeenCalledWith('al', null);
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('hello @Bob rest');
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+        expect(mention.getMentions()).toEqual([
+            { id: 3, name: 'Bob', start: 6, end: 10 },
+        ]);
+        expect(textarea.selectionStart).toBe(11);
+        mention.destroy();
+    });
+
+    it('does not leave a suffix when replacing a token before punctuation', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 5, name: 'Jo' }],
+        });
+        textarea.focus();
+        textarea.value = '@alex, rest';
+        textarea.setSelectionRange(3, 3); // @al|ex, in the token
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        expect(textarea.value).toBe('@Jo rest');
+        expect(mention.getMentions()).toEqual([
+            { id: 5, name: 'Jo', start: 0, end: 3 },
+        ]);
+        mention.destroy();
+    });
+});
