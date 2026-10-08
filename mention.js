@@ -1126,6 +1126,10 @@
                             this._closeDropdown();
                             return;
                         }
+                        if (!this._currentTextareaToken(token.query)) {
+                            this._closeDropdown();
+                            return;
+                        }
                         if (this._isHostFocused()) this._openDropdown(items);
                     });
                 }
@@ -1136,6 +1140,21 @@
             if (!span || span !== this._mentionSpan) {
                 this._closeDropdown();
             }
+        }
+
+        _currentTextareaToken(query = this._searchSession.currentQuery) {
+            if (this._el.selectionStart !== this._el.selectionEnd) return null;
+            const token = this._findTokenAtCursor(
+                this._el.value, this._el.selectionStart
+            );
+            if (!token ||
+                token.start !== this._mentionStart ||
+                token.end !== this._mentionEnd ||
+                token.query !== query ||
+                token.start === this._dismissedTextareaStart) {
+                return null;
+            }
+            return token;
         }
 
         _onTextareaBeforeInput(e) {
@@ -1171,6 +1190,10 @@
                 const items = await this._search(token.query);
                 if (items === null) return;
                 if (items === SEARCH_FAILED) {
+                    this._closeDropdown();
+                    return;
+                }
+                if (!this._currentTextareaToken(token.query)) {
                     this._closeDropdown();
                     return;
                 }
@@ -1712,7 +1735,10 @@
         }
 
         _commitTextareaMention(data) {
-            if (this._mentionStart === null) return;
+            if (!this._currentTextareaToken()) {
+                this._closeDropdown();
+                return;
+            }
 
             const mentionText = this._opts.trigger + data.name;
             const before = this._el.value.substring(0, this._mentionStart);

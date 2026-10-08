@@ -4628,3 +4628,80 @@ describe('MentionJS punctuation after committed or pushed mentions', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS silent host mutation race protection', () => {
+    it('does not open a pending textarea search after the trigger is removed silently', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let resolveRequest;
+        const searchFunction = () => new Promise((resolve) => {
+            resolveRequest = resolve;
+        });
+        const mention = new MentionJS(textarea, { searchFunction });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => expect(resolveRequest).toBeTypeOf('function'));
+
+        // Framework updates can assign .value without a corresponding input.
+        textarea.value = '';
+        textarea.setSelectionRange(0, 0);
+        resolveRequest([{ id: 1, name: 'Alice' }]);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+        mention.destroy();
+    });
+
+    it('refuses a stale keyboard selection after the trigger is removed without an input event', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+
+        textarea.value = 'normal text';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+
+        expect(textarea.value).toBe('normal text');
+        expect(mention.getMentions()).toEqual([]);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('preserves the legitimate result when the caret and token still match', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+        });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 0, end: 6 },
+        ]);
+        mention.destroy();
+    });
+});
