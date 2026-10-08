@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MentionModule from '../mention.js';
 
@@ -4230,6 +4231,46 @@ describe('MentionJS explicit asynchronous and programmatic contracts', () => {
 
         expect(types).toEqual(['insertReplacementText', 'deleteContent']);
         expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+});
+
+describe('MentionJS Unicode fallback and numeric identifier boundaries', () => {
+    it('supports combining marks and compound emoji without Intl.Segmenter', () => {
+        const source = readFileSync(new URL('../mention.js', import.meta.url), 'utf8');
+        const sandbox = {
+            module: { exports: {} }, exports: {},
+            Intl: { Segmenter: undefined },
+            window, document, HTMLElement, Element, Node, Event, InputEvent,
+            AbortController, requestAnimationFrame, setTimeout, clearTimeout, console,
+        };
+        runInNewContext(source, sandbox, { filename: 'mention-fallback.js' });
+        const FallbackMention = sandbox.module.exports;
+        for (const trigger of ['e\u0301', '🇩🇰', '👩🏽‍💻']) {
+            const textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            const mention = new FallbackMention(textarea, { trigger });
+            mention.destroy();
+            textarea.remove();
+        }
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new FallbackMention(editor);
+        mention.push({ id: 1, name: 'A👩🏽‍💻' });
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, span.textContent.length);
+        beforeInput(editor, 'deleteContentBackward');
+        expect(span.textContent).toBe('@A');
+        mention.destroy();
+    });
+
+    it('rejects non-finite public mention identifiers', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        expect(() => mention.push({ id: NaN, name: 'Alice' })).toThrow(/push/);
+        expect(() => mention.push({ id: Infinity, name: 'Alice' })).toThrow(/push/);
         mention.destroy();
     });
 });

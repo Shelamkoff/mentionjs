@@ -46,12 +46,33 @@
             }));
         }
 
+        // Preserve common extended graphemes on runtimes without Intl.Segmenter.
         const segments = [];
         let index = 0;
-        for (const segment of Array.from(str)) {
-            segments.push({ segment, start: index, end: index + segment.length });
-            index += segment.length;
+        let start = 0;
+        let cluster = '';
+        let regionalCount = 0;
+        for (const unit of Array.from(str)) {
+            const regional = /\p{Regional_Indicator}/u.test(unit);
+            const extend = /\p{Mark}/u.test(unit) ||
+                /\p{Emoji_Modifier}/u.test(unit);
+            const joins = cluster && (
+                extend || unit === '\u200D' || cluster.endsWith('\u200D') ||
+                (unit === '\n' && cluster.endsWith('\r')) ||
+                (regional && regionalCount === 1)
+            );
+            if (!joins && cluster) {
+                segments.push({ segment: cluster, start, end: index });
+                start = index;
+                cluster = '';
+                regionalCount = 0;
+            }
+            cluster += unit;
+            if (regional) regionalCount++;
+            else if (!extend && unit !== '\u200D') regionalCount = 0;
+            index += unit.length;
         }
+        if (cluster) segments.push({ segment: cluster, start, end: index });
         return segments;
     }
 
@@ -521,7 +542,8 @@
                 items.every((item) => (
                     item !== null &&
                     typeof item === 'object' &&
-                    (typeof item.id === 'string' || typeof item.id === 'number') &&
+                    (typeof item.id === 'string' ||
+                     (typeof item.id === 'number' && Number.isFinite(item.id))) &&
                     typeof item.name === 'string' &&
                     (item.avatar === undefined || typeof item.avatar === 'string') &&
                     (item.details === undefined || typeof item.details === 'string')
@@ -2163,7 +2185,15 @@
                 mirror.style.visibility = 'hidden';
                 mirror.style.top = '0';
                 mirror.style.left = '0';
-                mirror.style.width = el.offsetWidth + 'px';
+                // Exclude the real textarea's vertical scrollbar from line wrapping.
+                const borderLeft = parseFloat(cs.borderLeftWidth) || 0;
+                const borderRight = parseFloat(cs.borderRightWidth) || 0;
+                const paddingLeft = parseFloat(cs.paddingLeft) || 0;
+                const paddingRight = parseFloat(cs.paddingRight) || 0;
+                const mirrorWidth = cs.boxSizing === 'border-box'
+                    ? el.clientWidth + borderLeft + borderRight
+                    : el.clientWidth - paddingLeft - paddingRight;
+                mirror.style.width = Math.max(0, mirrorWidth) + 'px';
                 mirror.style.whiteSpace = 'pre-wrap';
                 mirror.style.wordWrap = 'break-word';
                 mirror.style.overflow = 'hidden';
@@ -2297,7 +2327,8 @@
             if (
                 !mentionData ||
                 typeof mentionData !== 'object' ||
-                (typeof mentionData.id !== 'string' && typeof mentionData.id !== 'number') ||
+                (typeof mentionData.id !== 'string' &&
+                 (typeof mentionData.id !== 'number' || !Number.isFinite(mentionData.id))) ||
                 typeof mentionData.name !== 'string'
             ) {
                 throw new Error('MentionJS: push() requires { id: string|number, name: string }');
