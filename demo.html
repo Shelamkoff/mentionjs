@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MentionJS — Demo</title>
+    <title>MentionJS — Interactive demo</title>
+    <meta name="description" content="Try async, abortable @mention autocomplete with pagination in a textarea or a rich-text editor.">
     <link rel="stylesheet" href="mention.css">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -127,6 +128,30 @@
         }
         .status.visible { display: block; }
 
+        .subtitle a { color: #165c99; text-underline-offset: 3px; }
+        .editor:focus-visible, .text-area:focus-visible, .btn:focus-visible {
+            outline: 3px solid #2563eb;
+            outline-offset: 2px;
+        }
+        .editor { overflow-wrap: anywhere; }
+        .hint { margin: 10px 0 0; font-size: 12px; color: #596779; }
+        .telemetry { margin: 14px 0 8px; font-size: 12px; color: #596779; min-height: 20px; }
+        .output-title { margin: 12px 0 7px; font-size: 12px; font-weight: 650; }
+        .mention-preview {
+            margin: 0; padding: 12px; background: #f5f7fa;
+            border: 1px solid #dbe3ed; border-radius: 7px;
+            min-height: 58px; max-height: 200px; overflow: auto;
+            white-space: pre-wrap; overflow-wrap: anywhere;
+            font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+        .example-tips { margin: 0; padding-left: 20px; color: #374151; font-size: 13px; }
+        .example-tips li { padding: 3px 0; }
+        .example-tips kbd { background: #f3f6fa; padding: 2px 5px; border: 1px solid #d1d5db; border-radius: 3px; font: inherit; }
+        .card .status { display: block; min-height: 20px; background: transparent; padding: 0; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition-duration: 0s !important; }
+        }
+
         /* ── API section ── */
         .api-grid {
             display: grid;
@@ -160,7 +185,7 @@
 <body>
 <div class="page">
     <h1>MentionJS</h1>
-    <p class="subtitle">Lightweight @-mention autocomplete · ~10 KB gzipped · No dependencies</p>
+    <p class="subtitle">Interactive @mention autocomplete · Abortable search · Pagination · No runtime dependencies · <a href="https://github.com/Shelamkoff/mentionjs">Source &amp; docs</a></p>
 
     <!-- ContentEditable demo -->
     <div class="card">
@@ -169,14 +194,20 @@
             id="editor"
             class="editor"
             contenteditable="true"
+            aria-label="Rich-text mention editor"
+            aria-describedby="hint-editor"
             data-placeholder="Type @ to mention someone…"
         ></div>
+        <p class="hint" id="hint-editor">Type <strong>@</strong> to browse or <strong>@ан</strong> / <strong>@al</strong> to filter people.</p>
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('editor')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('editor')">Push @Анна</button>
             <button class="btn btn-ghost" onclick="clearField('editor')">Clear</button>
         </div>
-        <div id="status-editor" class="status"></div>
+        <p id="search-editor" class="telemetry" role="status" aria-live="polite">Search: idle</p>
+        <p class="output-title">Committed mentions (string IDs)</p>
+        <pre id="mentions-editor" class="mention-preview">[]</pre>
+        <p id="status-editor" class="status" role="status" aria-live="polite"></p>
     </div>
 
     <!-- Textarea demo -->
@@ -185,122 +216,169 @@
         <textarea
             id="textarea"
             class="text-area"
+            aria-label="Plain-text mention editor"
+            aria-describedby="hint-textarea"
             placeholder="Type @ to mention someone…"
             rows="4"
         ></textarea>
+        <p class="hint" id="hint-textarea">Mentions keep UTF-16 <code>start</code> and <code>end</code> offsets. Try accepting a result with the caret inside the name.</p>
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('textarea')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('textarea')">Push @Мария</button>
             <button class="btn btn-ghost" onclick="clearField('textarea')">Clear</button>
         </div>
-        <div id="status-textarea" class="status"></div>
+        <p id="search-textarea" class="telemetry" role="status" aria-live="polite">Search: idle</p>
+        <p class="output-title">Committed mentions (with offsets)</p>
+        <pre id="mentions-textarea" class="mention-preview">[]</pre>
+        <p id="status-textarea" class="status" role="status" aria-live="polite"></p>
     </div>
+    <section class="card" aria-labelledby="how-to">
+        <h2 id="how-to">Try these interactions</h2>
+        <ul class="example-tips">
+            <li><kbd>@</kbd> shows the first page; scroll the dropdown or use <kbd>↓</kbd> to load more.</li>
+            <li><kbd>Enter</kbd> or <kbd>Tab</kbd> commits a selected person. <kbd>Esc</kbd> closes the dropdown.</li>
+            <li>Use the buttons above to inspect, insert, and clear mentions using the public API.</li>
+            <li>Searches run against local demo data only; no backend requests or account access.</li>
+        </ul>
+    </section>
+</div>
 
 <!-- Library -->
 <script src="mention.js"></script>
 <script>
-    // ── Sample data ───────────────────────────────────────────────────────
+"use strict";
+const USERS = [
+    { id: 1, name: "Anna Ivanova", details: "Frontend developer" },
+    { id: 2, name: "Alex Kim", details: "Product designer" },
+    { id: 3, name: "Alice Walker", details: "Software engineer" },
+    { id: 4, name: "Amelia Stone", details: "Technical writer" },
+    { id: 5, name: "Daniel Reed", details: "Data analyst" },
+    { id: 6, name: "Мария Васильева", details: "QA engineer" },
+    { id: 7, name: "Анна Иванова", details: "Frontend developer" },
+    { id: 8, name: "Алексей Петров", details: "Backend developer" },
+    { id: 9, name: "Антон Сидоров", details: "Designer" },
+    { id: 10, name: "Елена Морозова", details: "Product owner" },
+    { id: 11, name: "Olivia Patel", details: "Platform engineer" },
+    { id: 12, name: "Oliver Brown", details: "Engineering manager" },
+    { id: 13, name: "Sophia Li", details: "Researcher" },
+    { id: 14, name: "Emma Green", details: "UX writer" },
+    { id: 15, name: "Henry Foster", details: "Security engineer" },
+    { id: 16, name: "Liam Turner", details: "DevOps engineer" }
+];
+const PAGE_SIZE = 5;
+const requests = { editor: 0, textarea: 0 };
 
-    const USERS = [
-        { id: 1,  name: 'Анна Иванова',      details: 'Frontend Developer'     },
-        { id: 2,  name: 'Алексей Петров',     details: 'Backend Developer'      },
-        { id: 3,  name: 'Антон Сидоров',      details: 'UI/UX Designer'         },
-        { id: 4,  name: 'Александр Козлов',   details: 'Project Manager'        },
-        { id: 5,  name: 'Андрей Смирнов',     details: 'DevOps Engineer'        },
-        { id: 6,  name: 'Мария Васильева',    details: 'QA Engineer'            },
-        { id: 7,  name: 'Дмитрий Кузнецов',  details: 'Full Stack Developer'   },
-        { id: 8,  name: 'Елена Морозова',     details: 'Product Owner'          },
-        { id: 9,  name: 'Сергей Попов',       details: 'Tech Lead'              },
-        { id: 10, name: 'Ольга Новикова',     details: 'Business Analyst'       },
-        { id: 11, name: 'Николай Романов',    details: 'System Administrator'   },
-        { id: 12, name: 'Татьяна Фёдорова',  details: 'HR Manager'             },
-        { id: 13, name: 'Михаил Орлов',       details: 'Security Engineer'      },
-        { id: 14, name: 'Екатерина Волкова',  details: 'Marketing Manager'      },
-        { id: 15, name: 'Павел Зайцев',       details: 'Sales Manager'          },
-    ];
-
-    const PAGE_SIZE = 5;
-
-    async function searchUsers(query, nextPageUrl = null) {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                let filtered = query.trim()
-                    ? USERS.filter(u => u.name.toLowerCase().includes(query.toLowerCase()))
-                    : USERS;
-
-                let start = 0;
-                if (nextPageUrl) {
-                    try {
-                        start = parseInt(new URL(nextPageUrl, location.href).searchParams.get('start')) || 0;
-                    } catch (_) {}
-                }
-
-                const page = filtered.slice(start, start + PAGE_SIZE);
-                const hasMore = start + PAGE_SIZE < filtered.length;
-
-                resolve({
-                    items: page,
-                    nextPageUrl: hasMore
-                        ? `/?query=${encodeURIComponent(query)}&start=${start + PAGE_SIZE}`
-                        : null,
-                });
-            }, nextPageUrl ? 120 : 40);
-        });
-    }
-
-    // ── Initialise instances ──────────────────────────────────────────────
-
-    const editorMention = new MentionJS(document.getElementById('editor'), {
-        trigger: '@',
-        searchFunction: searchUsers,
-        debounceDelay: 200,
-        noResultsText: 'Никого не найдено',
-        onMentionSelect(data) {
-            console.log('[contenteditable] selected:', data);
-        },
-    });
-
-    const textareaMention = new MentionJS(document.getElementById('textarea'), {
-        trigger: '@',
-        searchFunction: searchUsers,
-        debounceDelay: 200,
-        noResultsText: 'Никого не найдено',
-        onMentionSelect(data) {
-            console.log('[textarea] selected:', data);
-        },
-    });
-
-    // ── UI helpers ────────────────────────────────────────────────────────
-
-    function flash(type, message) {
-        const el = document.getElementById('status-' + type);
-        el.textContent = message;
-        el.classList.add('visible');
-        setTimeout(() => el.classList.remove('visible'), 3500);
-    }
-
-    function readMentions(type) {
-        const instance = type === 'editor' ? editorMention : textareaMention;
-        const mentions = instance.getMentions();
-        if (mentions.length === 0) {
-            flash(type, 'No mentions found');
-        } else {
-            flash(type, 'Mentions: ' + mentions.map(m => '@' + m.name).join(', '));
+function searchUsers(query, nextPageUrl = null, context = {}) {
+    return new Promise((resolve, reject) => {
+        const signal = context.signal;
+        if (signal?.aborted) {
+            reject(new DOMException("Search cancelled", "AbortError"));
+            return;
         }
-    }
+        const abort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", abort);
+            reject(new DOMException("Search cancelled", "AbortError"));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", abort);
+            const filtered = query.trim()
+                ? USERS.filter(user => user.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+                : USERS;
+            const start = nextPageUrl
+                ? Math.max(0, Number(new URL(nextPageUrl, location.href).searchParams.get("start")) || 0)
+                : 0;
+            resolve({
+                items: filtered.slice(start, start + PAGE_SIZE),
+                nextPageUrl: start + PAGE_SIZE < filtered.length ? "?start=" + (start + PAGE_SIZE) : null
+            });
+        }, nextPageUrl ? 180 : 100);
+        signal?.addEventListener("abort", abort, { once: true });
+    });
+}
 
-    function pushMention(type) {
-        if (type === 'editor') {
-            editorMention.push({ id: 1, name: 'Анна Иванова' });
-        } else {
-            textareaMention.push({ id: 6, name: 'Мария Васильева' });
+function searchFor(kind) {
+    // The default context parameter reduces Function.length to 2. Demonstrate
+    // provideSearchContext explicitly rather than relying on callback arity.
+    return async (query, nextPageUrl, context = {}) => {
+        const current = ++requests[kind];
+        const output = document.getElementById("search-" + kind);
+        output.textContent = "Searching " + (query ? '"' + query + '"' : "all people") +
+            (nextPageUrl ? " · next page" : " · first page");
+        try {
+            const result = await searchUsers(query, nextPageUrl, context);
+            if (current === requests[kind]) {
+                output.textContent = "Search: " + result.items.length + " result(s) on this page" +
+                    (result.nextPageUrl ? " · more available" : "");
+            }
+            return result;
+        } catch (error) {
+            if (current === requests[kind]) {
+                output.textContent = error.name === "AbortError" ? "Search: cancelled" : "Search: failed";
+            }
+            throw error;
         }
-    }
+    };
+}
 
-    function clearField(type) {
-        const instance = type === 'editor' ? editorMention : textareaMention;
-        instance.clear();
+function refreshMentions(kind) {
+    document.getElementById("mentions-" + kind).textContent =
+        JSON.stringify(instances[kind].getMentions(), null, 2);
+}
+function showStatus(kind, message) {
+    document.getElementById("status-" + kind).textContent = message;
+}
+function readMentions(kind) {
+    refreshMentions(kind);
+    const count = instances[kind].getMentions().length;
+    showStatus(kind, count ? count + " committed mention(s)" : "No committed mentions");
+}
+function pushMention(kind) {
+    const mention = kind === "editor"
+        ? { id: 7, name: "Анна Иванова" }
+        : { id: 6, name: "Мария Васильева" };
+    instances[kind].push(mention);
+    refreshMentions(kind);
+    showStatus(kind, "Inserted " + mention.name);
+}
+function clearField(kind) {
+    ++requests[kind];
+    instances[kind].clear();
+    refreshMentions(kind);
+    showStatus(kind, "Cleared");
+    document.getElementById("search-" + kind).textContent = "Search: idle";
+}
+
+const editorMention = new MentionJS(document.getElementById("editor"), {
+    trigger: "@",
+    searchFunction: searchFor("editor"),
+    provideSearchContext: true,
+    emitInputOnProgrammaticChange: true,
+    debounceDelay: 180,
+    noResultsText: "No matching people",
+    onMentionSelect(data) {
+        showStatus("editor", "Selected " + data.name + " (ID " + data.id + ")");
+        refreshMentions("editor");
     }
+});
+const textareaMention = new MentionJS(document.getElementById("textarea"), {
+    trigger: "@",
+    searchFunction: searchFor("textarea"),
+    provideSearchContext: true,
+    emitInputOnProgrammaticChange: true,
+    debounceDelay: 180,
+    noResultsText: "No matching people",
+    onMentionSelect(data) {
+        showStatus("textarea", "Selected " + data.name + " (ID " + data.id + ")");
+        refreshMentions("textarea");
+    }
+});
+const instances = { editor: editorMention, textarea: textareaMention };
+for (const kind of ["editor", "textarea"]) {
+    document.getElementById(kind).addEventListener("input", () => refreshMentions(kind));
+    refreshMentions(kind);
+}
+document.documentElement.dataset.demoReady = "true";
 </script>
 </body>
 </html>
