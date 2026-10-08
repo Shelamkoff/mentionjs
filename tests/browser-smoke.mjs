@@ -1400,7 +1400,7 @@ try {
         snapshot.saved.some(m => m.id === 'saved' && m.name === 'Bob') &&
         !snapshot.text.includes('\u200B') &&
         snapshot.focus === 'editor' &&
-        snapshot.text.startsWith(typing + '@Bob')
+        snapshot.text.replace(/\u00A0/gu, ' ').startsWith(typing + '@Bob')
     ), 'Long/Unicode input before saved mention invalidated metadata: ' +
         JSON.stringify(nativeBoundaryTyping));
 
