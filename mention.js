@@ -1299,6 +1299,12 @@
                 !span.classList.contains('active') &&
                 text === this._opts.trigger + span.dataset.mentionName
             ) {
+                if (this._mentionSpan && this._mentionSpan !== span) {
+                    // Selection may have reached another committed mention
+                    // before the queued selectionchange event is delivered.
+                    // Do not leave results attached to the previous token.
+                    this._closeDropdown();
+                }
                 return;
             }
 

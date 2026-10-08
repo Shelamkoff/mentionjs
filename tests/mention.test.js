@@ -4376,3 +4376,30 @@ describe('MentionJS pending native textarea edits', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS cross-token input focus synchronization', () => {
+    it('closes stale suggestions if input moves into an unchanged committed mention', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@a</span>' +
+            '<span class="mention" data-mention-id="1" data-mention-name="Alice">@Alice</span>';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        const active = editor.firstChild;
+        const committed = editor.lastChild;
+        mention._mentionSpan = active;
+        editor.focus();
+        setCaret(active.firstChild, 2);
+        mention._openDropdown([{ id: 9, name: 'Other' }]);
+        expect(document.querySelector('.mention-dropdown')).not.toBeNull();
+
+        setCaret(committed.firstChild, 3);
+        // Selectionchange may be delivered after input when framework listeners run.
+        input(editor);
+
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+        expect(editor.querySelector('span.mention.active')).toBeNull();
+        mention.destroy();
+    });
+});
