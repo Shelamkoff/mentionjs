@@ -1262,6 +1262,66 @@ try {
             abortedOnCaretMove, staleCaretResults,
         }));
 
+
+    // Native undo/redo must retain the mention while reversing text typed
+    // immediately before it. Probe a selection-only native edit separately,
+    // without using that probe as the test oracle.
+    const boundaryUndoCases = [];
+    for (const mode of ['current', 'native-reposition']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        await execute(`
+            const editor = document.getElementById('editor');
+            editor.focus();
+            window.__instance = new MentionJS(editor);
+            window.__instance.push({ id: 'persist', name: 'Bob' });
+            const range = document.createRange(), sel = window.getSelection();
+            range.setStart(editor, 0);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            if (arguments[0] === 'native-reposition') {
+                // Diagnostic: could the browser own the edit and undo stack
+                // if caret were moved to an adjacent text node before input?
+                window.__instance._insertTextBeforeCommittedMention = (e) => {
+                    if (e.inputType !== 'insertText') return false;
+                    const span = editor.querySelector('span.mention');
+                    const textNode = document.createTextNode('');
+                    span.before(textNode);
+                    const r = document.createRange();
+                    r.setStart(textNode, 0);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    return false;
+                };
+            }
+        `, [mode]);
+        const state = () => execute(`
+            const editor = document.getElementById('editor');
+            return {
+                text: editor.textContent,
+                html: editor.innerHTML,
+                mentions: window.__instance.getMentions(),
+            };
+        `);
+        await sendKeys('x');
+        const inserted = await state();
+        await sendKeys('\uE009z\uE000');
+        const undone = await state();
+        await sendKeys('\uE009\uE008z\uE000');
+        const redone = await state();
+        boundaryUndoCases.push({ mode, inserted, undone, redone });
+    }
+    const undoCurrent = boundaryUndoCases.find(c => c.mode === 'current');
+    assert(undoCurrent.inserted.text.startsWith('x@Bob') &&
+        undoCurrent.inserted.mentions.length === 1 &&
+        !undoCurrent.undone.text.startsWith('x@Bob') &&
+        undoCurrent.undone.mentions.length === 1 &&
+        undoCurrent.redone.text.startsWith('x@Bob') &&
+        undoCurrent.redone.mentions.length === 1,
+        'Native undo/redo after typing before mention is broken: ' +
+        JSON.stringify(boundaryUndoCases));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
