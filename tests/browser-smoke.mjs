@@ -1093,6 +1093,22 @@ try {
         const initial = await execute(`
             const editor = document.getElementById('editor');
             editor.focus();
+            window.__boundaryEvents = [];
+            for (const eventName of ['beforeinput', 'input', 'paste', 'compositionstart']) {
+                editor.addEventListener(eventName, (event) => {
+                    const selection = window.getSelection();
+                    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+                    window.__boundaryEvents.push({
+                        name: eventName,
+                        type: event.inputType || null,
+                        data: event.data || null,
+                        cancelable: event.cancelable,
+                        container: range?.startContainer?.nodeName ?? null,
+                        offset: range?.startOffset ?? null,
+                        html: editor.innerHTML,
+                    });
+                }, { capture: true });
+            }
             window.__instance = new MentionJS(editor);
             if (arguments[0] === 'between-mentions') {
                 window.__instance.push({ id: 'left', name: 'Alice' });
@@ -1155,6 +1171,7 @@ try {
                     text: span.textContent,
                 })),
                 selectionText: window.getSelection().toString(),
+                events: window.__boundaryEvents,
             };
         `);
         adjacencyCases.push({ scenario, initial, result });
