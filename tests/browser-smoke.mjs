@@ -1193,6 +1193,69 @@ try {
             (scenario !== 'before-mention-enter' || result.html.includes('<br>'));
     }), 'Editing adjacent to saved mentions corrupted identity: ' + JSON.stringify(adjacencyCases));
 
+
+    // Pending search must be canceled on caret movement even before the first
+    // dropdown mounts. Input host remains focused throughout this scenario.
+    await request(base + '/url', 'POST', { url: fixtureUrl });
+    await execute(`
+        const editor = document.getElementById('editor');
+        editor.textContent = 'tail';
+        editor.focus();
+        const sel = window.getSelection(), range = document.createRange();
+        range.setStart(editor.firstChild, 0);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        window.__pendingSearchResolve = null;
+        window.__pendingSearchSignal = null;
+        window.__instance = new MentionJS(editor, {
+            provideSearchContext: true,
+            searchFunction(query, page, context) {
+                window.__pendingSearchSignal = context.signal;
+                return new Promise(resolve => window.__pendingSearchResolve = resolve);
+            },
+        });
+    `);
+    await sendKeys('@');
+    await waitFor(
+        () => execute("return typeof window.__pendingSearchResolve === 'function'"),
+        Boolean, 'Pending search not started before caret movement'
+    );
+    await execute(`
+        const editor = document.getElementById('editor');
+        const tail = editor.lastChild;
+        const sel = window.getSelection(), range = document.createRange();
+        range.setStart(tail, tail.textContent.length);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.dispatchEvent(new Event('selectionchange'));
+    `);
+    const abortedOnCaretMove = await execute(`
+        return {
+            aborted: window.__pendingSearchSignal.aborted,
+            active: !!document.querySelector('#editor span.mention.active'),
+            dropdown: !!document.querySelector('.mention-dropdown'),
+        };
+    `);
+    await execute("window.__pendingSearchResolve([{ id: 55, name: 'Stale' }]);");
+    await sleep(250);
+    const staleCaretResults = await execute(`
+        const editor = document.getElementById('editor');
+        return {
+            text: editor.textContent,
+            active: !!editor.querySelector('span.mention.active'),
+            dropdown: !!document.querySelector('.mention-dropdown'),
+            focused: document.activeElement?.id,
+            aborted: window.__pendingSearchSignal.aborted,
+        };
+    `);
+    assert(abortedOnCaretMove.aborted && !staleCaretResults.active &&
+        !staleCaretResults.dropdown && staleCaretResults.focused === 'editor',
+        'Pending search outlived its caret: ' + JSON.stringify({
+            abortedOnCaretMove, staleCaretResults,
+        }));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
