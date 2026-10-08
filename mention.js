@@ -658,7 +658,12 @@
             const previousText = this._value ?? '';
             const edit = this._edit;
 
-            if (previousText !== text) {
+            // An actual input may replace a selected mention with identical
+            // visible text. The beforeinput range still proves the original
+            // mention was overwritten even if the final value is unchanged.
+            const replacedSelection =
+                edit?.value === previousText && edit.start < edit.end;
+            if (previousText !== text || replacedSelection) {
                 const delta = text.length - previousText.length;
                 const suffix = previousText.substring(edit?.end ?? previousText.length);
                 const trustedEdit = edit &&

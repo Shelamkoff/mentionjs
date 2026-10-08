@@ -4845,3 +4845,41 @@ describe('MentionJS abort listener reentrancy', () => {
         expect(mention._searchSession.items).toEqual([]);
     });
 });
+
+describe('MentionJS identical native replacement identity', () => {
+    it('invalidates a mention replaced by identical visible text', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 42, name: 'Alice' });
+        textarea.focus();
+        textarea.setSelectionRange(0, 6);
+        beforeInput(textarea, 'insertReplacementText', '@Alice');
+
+        // A native replacement has occurred, but its final value is identical.
+        input(textarea);
+
+        expect(textarea.value).toBe('@Alice ');
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('preserves an untouched mention when an identical replacement occurs elsewhere', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        textarea.value = 'hello ';
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 42, name: 'Alice' });
+        textarea.value += 'world';
+        expect(mention.getMentions()).toHaveLength(1);
+        textarea.focus();
+        textarea.setSelectionRange(0, 5);
+        beforeInput(textarea, 'insertReplacementText', 'hello');
+        input(textarea);
+
+        expect(mention.getMentions()).toEqual([
+            { id: 42, name: 'Alice', start: 6, end: 12 },
+        ]);
+        mention.destroy();
+    });
+});
