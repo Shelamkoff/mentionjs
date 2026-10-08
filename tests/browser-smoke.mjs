@@ -1267,7 +1267,7 @@ try {
     // immediately before it. Probe a selection-only native edit separately,
     // without using that probe as the test oracle.
     const boundaryUndoCases = [];
-    for (const mode of ['current', 'native-reposition', 'exec-empty', 'exec-nbsp', 'exec-zwsp', 'native-prefilled']) {
+    for (const mode of ['current']) {
         await request(base + '/url', 'POST', { url: fixtureUrl });
         await execute(`
             const editor = document.getElementById('editor');
@@ -1352,7 +1352,7 @@ try {
         const probeInfo = await execute("return { execOk: window.__execOk ?? null, execError: window.__execError ?? null, sentinel: window.__boundarySentinel?.textContent ?? null };");
         boundaryUndoCases.push({ mode, inserted, undone, redone, probeInfo });
     }
-    const undoCurrent = boundaryUndoCases.find(c => c.mode === 'current');
+    const undoCurrent = boundaryUndoCases[0];
     assert(undoCurrent.inserted.text.startsWith('x@Bob') &&
         undoCurrent.inserted.mentions.length === 1 &&
         !undoCurrent.undone.text.startsWith('x@Bob') &&

@@ -5234,15 +5234,25 @@ describe('MentionJS text insertion before a committed inline mention', () => {
             } else {
                 setCaret(editor, 0);
             }
-            const space = beforeInput(editor, 'insertText', ' ');
-            expect(space.defaultPrevented).toBe(true);
+            const insert = (value) => {
+                const event = beforeInput(editor, 'insertText', value);
+                expect(event.defaultPrevented).toBe(false);
+                const marker = span.previousSibling;
+                expect(marker.nodeType).toBe(Node.TEXT_NODE);
+                expect(marker.textContent).toBe('\u200B');
+                marker.insertData(0, value);
+                setCaret(marker, value.length);
+                input(editor);
+                expect(marker.textContent).toBe(value);
+                expect(editor.textContent.includes('\u200B')).toBe(false);
+            };
+            insert(' ');
             expect(mention.getMentions()).toEqual([
                 { id: 'original', name: 'Anna Ivanova' },
             ]);
             expect(span.isConnected).toBe(true);
 
-            const character = beforeInput(editor, 'insertText', 'x');
-            expect(character.defaultPrevented).toBe(true);
+            insert('x');
             expect(editor.textContent.startsWith(' x@Anna Ivanova')).toBe(true);
             expect(editor.querySelector('span.mention[data-mention-id]')).toBe(span);
             expect(mention.getMentions()).toEqual([
@@ -5277,7 +5287,10 @@ describe('MentionJS text insertion before a committed inline mention', () => {
         editor.focus();
         setCaret(prefix, 2);
         const inserted = beforeInput(editor, 'insertText', 'x');
-        expect(inserted.defaultPrevented).toBe(true);
+        expect(inserted.defaultPrevented).toBe(false);
+        prefix.insertData(2, 'x');
+        setCaret(prefix, 3);
+        input(editor);
         expect(prefix.textContent).toBe('hexllo');
         expect(mention.getMentions()).toEqual([
             { id: '7', name: 'Anna Ivanova' },
@@ -5401,5 +5414,37 @@ describe('MentionJS custom renderer error containment', () => {
         mention._ui.render([{ id: 1, name: 'Test' }], 0);
         expect(receiver).toBe(mention._opts);
         mention.destroy();
+    });
+});
+
+describe('MentionJS native boundary marker cleanup', () => {
+    it('removes a pending boundary marker on blur even without an input event', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        const other = document.createElement('textarea');
+        document.body.append(editor, other);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 10, name: 'Bob' });
+        editor.focus();
+        setCaret(editor, 0);
+        const event = beforeInput(editor, 'insertText', 'x');
+        expect(event.defaultPrevented).toBe(false);
+        expect(editor.textContent.includes('\u200B')).toBe(true);
+        other.focus();
+        expect(editor.textContent.includes('\u200B')).toBe(false);
+        expect(mention.getMentions()).toEqual([{ id: '10', name: 'Bob' }]);
+        mention.destroy();
+    });
+    it('cleans up a marker on destroy when the native input never arrives', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 10, name: 'Bob' });
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', 'x');
+        mention.destroy();
+        expect(editor.textContent.includes('\u200B')).toBe(false);
     });
 });

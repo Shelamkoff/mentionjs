@@ -928,6 +928,7 @@
             this._suppressNextInput = false;
             this._suppressSyntheticContentEditableInput = false;
             this._nativeTriggerPending = false;
+            this._nativeBoundaryMarker = null;
             this._dismissedTextareaStart = null;
             this._destroyed = false;
 
@@ -1002,7 +1003,10 @@
         _bindElementEvents() {
             // A blur must not restore a selection inside the old host:
             // setBaseAndExtent() can focus that editor again in browsers.
-            this._h.blur = () => this._closeDropdown(false);
+            this._h.blur = () => {
+                this._clearNativeBoundaryMarker();
+                this._closeDropdown(false);
+            };
 
             if (this._isTextarea) {
                 this._h.beforeinput = (e) => this._onTextareaBeforeInput(e);
@@ -1301,18 +1305,20 @@
         }
 
         async _onBeforeInput(e) {
+            this._clearNativeBoundaryMarker();
             this._nativeTriggerPending = false;
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
             if (span) {
+                if (this._prepareNativeTextBeforeMention(e, sel, span)) return;
                 if (this._insertLineBreakBeforeCommittedMention(e, sel, span)) return;
                 await this._handleInputInsideSpan(e, span, sel);
                 return;
             }
 
             if (this._insertLineBreakBeforeCommittedMention(e, sel)) return;
-            if (this._insertTextBeforeCommittedMention(e, sel)) return;
+            if (this._prepareNativeTextBeforeMention(e, sel)) return;
 
             if (e.inputType === 'insertText' && e.data === this._opts.trigger) {
                 if (!this._canInsertMentionHere(sel)) return;
@@ -1378,59 +1384,69 @@
             return true;
         }
 
-        _insertTextBeforeCommittedMention(e, sel) {
-            // At an inline editing boundary, Chrome can absorb a normal text
-            // insertion into the adjacent committed span and strip its DOM
-            // metadata. Insert into the preceding text node instead.
-            if (!e.cancelable || !sel?.rangeCount || !sel.isCollapsed ||
+        _prepareNativeTextBeforeMention(e, sel, insideSpan = null) {
+            // Chrome can absorb a native insertion at an inline boundary into
+            // the adjacent committed span. A temporary nonempty text node
+            // gives its editing engine an outside target, so the actual input
+            // remains browser-managed and participates in Undo/Redo history.
+            if (!sel?.rangeCount || !sel.isCollapsed ||
                 !['insertText', 'insertReplacementText'].includes(e.inputType) ||
                 typeof e.data !== 'string' || e.data.length === 0 ||
-                e.data === this._opts.trigger) {
-                return false;
-            }
+                e.data === this._opts.trigger) return false;
 
             const range = sel.getRangeAt(0);
             const container = range.startContainer;
             const offset = range.startOffset;
             if (container !== this._el && !this._el.contains(container)) return false;
 
-            let next;
-            if (container.nodeType === Node.TEXT_NODE) {
+            let next = insideSpan;
+            if (next) {
+                if (this._textOffsetInMention(next, sel) !== 0) return false;
+            } else if (container.nodeType === Node.TEXT_NODE &&
+                offset === container.textContent.length) {
                 next = container.nextSibling;
             } else if (container.nodeType === Node.ELEMENT_NODE) {
                 next = container.childNodes[offset];
-            } else {
+            }
+
+            if (!this._isMentionSpan(next) ||
+                !next.hasAttribute('data-mention-id') ||
+                !next.hasAttribute('data-mention-name') ||
+                next.textContent !== this._opts.trigger + next.dataset.mentionName) {
                 return false;
             }
 
-            const committed = this._isMentionSpan(next) &&
-                next.hasAttribute('data-mention-id') &&
-                next.hasAttribute('data-mention-name') &&
-                next.textContent === this._opts.trigger + next.dataset.mentionName;
-            if (!committed) return false;
-
-            e.preventDefault();
-
-            if (container.nodeType === Node.TEXT_NODE) {
-                container.insertData(offset, e.data);
-                setCaretAt(container, offset + e.data.length);
-            } else {
-                const previous = container.childNodes[offset - 1];
-                if (previous?.nodeType === Node.TEXT_NODE) {
-                    previous.appendData(e.data);
-                    setCaretAt(previous, previous.textContent.length);
-                } else {
-                    const textNode = document.createTextNode(e.data);
-                    container.insertBefore(textNode, next);
-                    setCaretAt(textNode, e.data.length);
+            const node = document.createTextNode('\u200B');
+            next.before(node);
+            setCaretAt(node, 0);
+            const marker = { node, next, timeout: null };
+            this._nativeBoundaryMarker = marker;
+            // A third-party beforeinput listener can cancel the insertion;
+            // clean up even if no native input event follows.
+            marker.timeout = setTimeout(() => {
+                if (this._nativeBoundaryMarker === marker) {
+                    this._clearNativeBoundaryMarker();
                 }
-            }
-
-            this._dispatchContentEditableInput(e.inputType, e.data);
+            }, 0);
             return true;
         }
 
+        _clearNativeBoundaryMarker() {
+            const marker = this._nativeBoundaryMarker;
+            if (!marker) return;
+            this._nativeBoundaryMarker = null;
+            clearTimeout(marker.timeout);
+            const adjacent = marker.next?.previousSibling;
+            const node = marker.node.isConnected ? marker.node :
+                adjacent?.nodeType === Node.TEXT_NODE ? adjacent : null;
+            if (!node) return;
+            const index = node.textContent.lastIndexOf('\u200B');
+            if (index >= 0) node.deleteData(index, 1);
+            if (node.textContent.length === 0) node.remove();
+        }
+
         async _onContentEditableInput() {
+            this._clearNativeBoundaryMarker();
             if (this._suppressSyntheticContentEditableInput) return;
 
             const pendingNativeTrigger = this._nativeTriggerPending;
@@ -2821,6 +2837,7 @@
         destroy() {
             if (this._destroyed) return;
 
+            this._clearNativeBoundaryMarker();
             this._closeDropdown();
             this._dismissedTextareaStart = null;
             this._unbindElementEvents();
