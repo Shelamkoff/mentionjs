@@ -592,6 +592,118 @@ try {
         demoApi.editorCleared === 0 && demoApi.textarea === '' && demoApi.editorText === '',
         'Demo public API controls did not keep metadata in sync');
 
+
+    // 10. Long native contenteditable typing must not silently unwrap the active
+    // mention before the user chooses a suggestion, even with no match.
+    await request(base + '/url', 'POST', { url: fixtureUrl });
+    await execute(`
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '';
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.__typingTrace = [];
+        const snapshot = (type, event) => {
+            const span = editor.querySelector('span.mention');
+            const sel = window.getSelection();
+            window.__typingTrace.push({
+                type,
+                inputType: event?.inputType || null,
+                data: event?.data || null,
+                text: editor.textContent,
+                span: span?.textContent || null,
+                active: !!span?.classList.contains('active'),
+                node: sel.anchorNode?.nodeName || null,
+                parent: sel.anchorNode?.parentElement?.tagName || null,
+                offset: sel.anchorOffset,
+            });
+        };
+        editor.addEventListener('beforeinput', (event) => snapshot('beforeinput', event), true);
+        editor.addEventListener('input', (event) => snapshot('input', event));
+        document.addEventListener('selectionchange', () => snapshot('selectionchange'));
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 30,
+            searchFunction: async (query) => {
+                await new Promise(resolve => setTimeout(resolve, 85));
+                return query.toLowerCase().startsWith('anna')
+                    ? [{ id: 100, name: 'Anna Ivanova' }]
+                    : [];
+            },
+        });
+    `);
+    await sendKeys('@Anna Ivanod');
+    await sleep(450);
+    const typingState = await execute(`
+        const editor = document.getElementById('editor');
+        return {
+            text: editor.textContent,
+            span: editor.querySelector('span.mention')?.outerHTML || null,
+            active: !!editor.querySelector('span.mention.active'),
+            expanded: editor.getAttribute('aria-expanded'),
+            dropdown: !!document.querySelector('.mention-dropdown.active'),
+            trace: window.__typingTrace.slice(-35),
+        };
+    `);
+    assert(typingState.text === '@Anna Ivanod' &&
+        typingState.active && typingState.dropdown,
+        'Long native contenteditable query lost its active token: ' +
+        JSON.stringify(typingState));
+
+    // Editing a committed mention must retain the editable token while
+    // the trigger still exists, without silently converting it to plain text.
+    await execute(`
+        window.__instance.destroy();
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '';
+        editor.focus();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+        });
+    `);
+    await sendKeys('@a');
+    await waitFor(
+        () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+        Boolean, 'No suggestions before edit-committed case'
+    );
+    await sendKeys('\uE007');
+    await execute(`
+        const span = document.querySelector('#editor span[data-mention-id]');
+        const range = document.createRange();
+        range.setStart(span.firstChild, span.textContent.length - 1);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.getElementById('editor').focus();
+    `);
+    await sendKeys('\uE003');
+    await sleep(120);
+    const reedit = await execute(`
+        const el = document.getElementById('editor');
+        const span = el.querySelector('span.mention');
+        return {
+            text: el.textContent,
+            active: !!span?.classList.contains('active'),
+            span: span?.outerHTML || null,
+            dropdown: !!document.querySelector('.mention-dropdown.active'),
+            mentions: window.__instance.getMentions(),
+        };
+    `);
+    assert(reedit.active && reedit.dropdown &&
+        reedit.mentions.length === 0,
+        'Editing a committed mention did not retain an active span: ' + JSON.stringify(reedit));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
