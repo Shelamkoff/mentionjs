@@ -1084,6 +1084,91 @@ try {
     ), 'Typing before the trigger invalidates the committed mention: ' +
         JSON.stringify(beforeTriggerCases));
 
+
+    // Adjacent committed mentions, selected prefixes, and formatted paste:
+    // mutating surrounding text must not invalidate unrelated IDs.
+    const adjacencyCases = [];
+    for (const scenario of ['between-mentions', 'replace-prefix-selection', 'native-insert-html', 'before-mention-enter']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        const initial = await execute(`
+            const editor = document.getElementById('editor');
+            editor.focus();
+            window.__instance = new MentionJS(editor);
+            if (arguments[0] === 'between-mentions') {
+                window.__instance.push({ id: 'left', name: 'Alice' });
+                window.__instance.push({ id: 'right', name: 'Bob' });
+                const first = editor.querySelector('span.mention');
+                const second = editor.querySelectorAll('span.mention')[1];
+                const sel = window.getSelection(), range = document.createRange();
+                range.setStartBefore(second);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else {
+                window.__instance.push({ id: 'right', name: 'Bob' });
+                const span = editor.querySelector('span.mention');
+                if (arguments[0] === 'replace-prefix-selection') {
+                    span.before(document.createTextNode('hello'));
+                    const range = document.createRange();
+                    range.setStart(span.previousSibling, 2);
+                    range.setEnd(span.previousSibling, 5);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                } else {
+                    const sel = window.getSelection(), range = document.createRange();
+                    range.setStart(editor, 0);
+                    range.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+            }
+            return { html: editor.innerHTML, selection: window.getSelection().toString() };
+        `, [scenario]);
+        if (scenario === 'between-mentions') {
+            await sendKeys('xy');
+        } else if (scenario === 'replace-prefix-selection') {
+            await sendKeys('z');
+        } else if (scenario === 'before-mention-enter') {
+            await sendKeys('\uE007'); // Enter at caret before mention
+        } else {
+            // execCommand exercises a browser-owned rich HTML insertion path
+            // (similar to a formatted paste) without mocking a DOM mutation.
+            const supported = await execute(`
+                return document.execCommand('insertHTML', false, '<em>hello</em>');
+            `);
+            if (!supported) {
+                adjacencyCases.push({ scenario, skipped: 'execCommand unsupported' });
+                continue;
+            }
+        }
+        const result = await execute(`
+            const editor = document.getElementById('editor');
+            const spans = [...editor.querySelectorAll('span.mention[data-mention-id]')];
+            return {
+                html: editor.innerHTML,
+                text: editor.textContent,
+                mentions: window.__instance.getMentions(),
+                spans: spans.map(span => ({
+                    id: span.dataset.mentionId,
+                    name: span.dataset.mentionName,
+                    text: span.textContent,
+                })),
+                selectionText: window.getSelection().toString(),
+            };
+        `);
+        adjacencyCases.push({ scenario, initial, result });
+    }
+    assert(adjacencyCases.every(({ scenario, skipped, result }) =>
+        skipped || (
+            result.mentions.length === (scenario === 'between-mentions' ? 2 : 1) &&
+            result.spans.every(s => s.text === '@' + s.name) &&
+            result.mentions.some(s => s.id === 'right' && s.name === 'Bob') &&
+            (scenario !== 'between-mentions' ||
+                result.mentions.some(s => s.id === 'left' && s.name === 'Alice'))
+        )
+    ), 'Editing adjacent to saved mentions corrupted identity: ' + JSON.stringify(adjacencyCases));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
