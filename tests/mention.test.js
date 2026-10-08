@@ -4917,3 +4917,33 @@ describe('MentionJS keyboard selection synchronization', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS selection spanning a cancelled token', () => {
+    it('preserves a noncollapsed selection when an active token is unwrapped', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@al</span> tail';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        const span = editor.querySelector('span.mention');
+        const trailingText = span.nextSibling;
+        mention._mentionSpan = span;
+        editor.focus();
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(span.firstChild, 1);
+        range.setEnd(trailingText, 3);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        expect(selection.toString()).toBe('al ta');
+
+        document.dispatchEvent(new Event('selectionchange'));
+
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.textContent).toBe('@al tail');
+        expect(selection.isCollapsed).toBe(false);
+        expect(selection.toString()).toBe('al ta');
+        mention.destroy();
+    });
+});
