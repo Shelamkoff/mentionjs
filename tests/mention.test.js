@@ -4348,3 +4348,31 @@ describe('MentionJS ambiguous textarea edits and identity protection', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS pending native textarea edits', () => {
+    it('getMentions does not consume a beforeinput range before the native input', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        mention.push({ id: 'first', name: 'Alice' });
+        mention.push({ id: 'second', name: 'Alice' });
+
+        textarea.setSelectionRange(0, 7);
+        beforeInput(textarea, 'deleteContentBackward');
+
+        expect(mention.getMentions()).toEqual([
+            { id: 'first', name: 'Alice', start: 0, end: 6 },
+            { id: 'second', name: 'Alice', start: 7, end: 13 },
+        ]);
+
+        textarea.value = '@Alice ';
+        textarea.setSelectionRange(0, 0);
+        input(textarea);
+
+        expect(mention.getMentions()).toEqual([
+            { id: 'second', name: 'Alice', start: 0, end: 6 },
+        ]);
+        mention.destroy();
+    });
+});

@@ -696,6 +696,12 @@
             this.acknowledge(text);
         }
 
+        sync(value) {
+            // Reading metadata before the browser's native input event must not
+            // consume the pending beforeinput range while the value is unchanged.
+            if (value !== this._value) this.reconcile(value);
+        }
+
         replaceRange(start, end, replacementLength, mention) {
             const delta = replacementLength - (end - start);
 
@@ -2352,7 +2358,7 @@
 
             if (this._isTextarea) {
                 // Programmatic value changes do not emit input events.
-                this._textareaMentions.reconcile(this._el.value);
+                this._textareaMentions.sync(this._el.value);
                 return this._textareaMentions.getMentions();
             }
             return Array.from(
@@ -2392,7 +2398,7 @@
             this._dismissedTextareaStart = null;
 
             if (this._isTextarea) {
-                this._textareaMentions.reconcile(this._el.value);
+                this._textareaMentions.sync(this._el.value);
                 const text = this._el.value;
                 const mentionText = this._opts.trigger + mentionData.name;
                 const hasCaret = this._isHostFocused();
