@@ -460,21 +460,25 @@
         }
 
         async search(query, nextPageUrl = null) {
+            // Allocate ownership before cancelling the previous request:
+            // abort listeners can synchronously cancel or start another search.
+            const requestId = ++this._requestId;
             if (!nextPageUrl) {
                 this._currentQuery = query;
                 this._cancelDebounce();
                 this._cancelActiveRequest();
+                if (requestId !== this._requestId) return null;
                 this._items = [];
                 this._nextPageUrl = null;
                 this._invalidateLoadingMore();
             }
 
-            const requestId = ++this._requestId;
-
             const execute = async () => {
+                if (requestId !== this._requestId) return null;
                 if (!this._options.searchFunction) return { items: [], nextPageUrl: null };
 
                 this._cancelActiveRequest();
+                if (requestId !== this._requestId) return null;
 
                 const controller = typeof AbortController === 'function'
                     ? new AbortController()
@@ -574,9 +578,10 @@
         }
 
         cancel() {
-            this._requestId++;
+            const requestId = ++this._requestId;
             this._cancelDebounce();
             this._cancelActiveRequest();
+            if (requestId !== this._requestId) return;
             this._items = [];
             this._nextPageUrl = null;
             this._invalidateLoadingMore();
@@ -594,14 +599,14 @@
         }
 
         _cancelActiveRequest() {
-            if (this._activeController && !this._activeController.signal.aborted) {
-                this._activeController.abort();
-            }
-            if (this._activeReject) {
-                this._activeReject(SEARCH_CANCELLED);
-            }
+            // Detach the outgoing request before dispatching the synchronous
+            // abort event, so reentrant searches retain their own controller.
+            const controller = this._activeController;
+            const reject = this._activeReject;
             this._activeController = null;
             this._activeReject = null;
+            if (controller && !controller.signal.aborted) controller.abort();
+            if (reject) reject(SEARCH_CANCELLED);
         }
     }
 

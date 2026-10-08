@@ -4783,3 +4783,63 @@ describe('MentionJS reentrant custom rendering lifecycle', () => {
         expect(searchFunction).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('MentionJS abort listener reentrancy', () => {
+    it('does not start a replacement search after abort synchronously destroys the instance', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let calls = 0;
+        let mention;
+        mention = new MentionJS(textarea, {
+            searchFunction(query, page, context) {
+                calls++;
+                context.signal.addEventListener('abort', () => mention.destroy());
+                return new Promise(() => {});
+            },
+        });
+
+        const initial = mention._search('');
+        expect(calls).toBe(1);
+        const replacement = mention._search('');
+        expect(await initial).toBeNull();
+        expect(await replacement).toBeNull();
+        expect(calls).toBe(1);
+        expect(mention._destroyed).toBe(true);
+        expect(mention._searchSession._activeController).toBeNull();
+    });
+
+    it('preserves a newer search started synchronously inside an abort callback', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let calls = 0;
+        let nested = null;
+        let mention;
+        const signals = [];
+        mention = new MentionJS(textarea, {
+            searchFunction(query, page, context) {
+                calls++;
+                signals.push(context.signal);
+                if (calls === 1) {
+                    context.signal.addEventListener('abort', () => {
+                        nested = mention._search('');
+                    });
+                    return new Promise(() => {});
+                }
+                return Promise.resolve([{ id: 2, name: 'New' }]);
+            },
+        });
+
+        const initial = mention._search('');
+        const superseded = mention._search('');
+        expect(await initial).toBeNull();
+        expect(await superseded).toBeNull();
+        expect(nested).not.toBeNull();
+        expect(await nested).toEqual([{ id: 2, name: 'New' }]);
+        expect(calls).toBe(2);
+        expect(signals[0].aborted).toBe(true);
+        expect(signals[1].aborted).toBe(false);
+        expect(mention._searchSession.items).toEqual([{ id: 2, name: 'New' }]);
+        mention.destroy();
+        expect(signals[1].aborted).toBe(true);
+    });
+});
