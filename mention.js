@@ -1167,7 +1167,27 @@
 
             const text = span.textContent || '';
 
+            // An unrelated input event must not erase a committed mention.
+            if (
+                span.hasAttribute('data-mention-id') &&
+                span.hasAttribute('data-mention-name') &&
+                !span.classList.contains('active') &&
+                text === this._opts.trigger + span.dataset.mentionName
+            ) {
+                return;
+            }
+
             if (!text.startsWith(this._opts.trigger)) {
+                this._invalidateMentionMetadata(span);
+                this._unwrapMentionSpan(span, sel);
+                this._closeDropdown();
+                return;
+            }
+
+            const query = text.substring(this._opts.trigger.length);
+            if (/\s/u.test(query)) {
+                // The token ended at whitespace. Keep the typed text, but stop
+                // treating it as an unfinished mention or a search context.
                 this._invalidateMentionMetadata(span);
                 this._unwrapMentionSpan(span, sel);
                 this._closeDropdown();
@@ -1178,7 +1198,7 @@
             span.classList.add('active');
             this._mentionSpan = span;
 
-            const items = await this._search(text.substring(this._opts.trigger.length));
+            const items = await this._search(query);
             if (items === null) return;
             if (items === SEARCH_FAILED) {
                 this._closeDropdown();
@@ -1587,7 +1607,13 @@
             this._closeDropdown();
 
             this._suppressNextInput = true;
-            this._el.dispatchEvent(new Event('input', { bubbles: true }));
+            try {
+                this._el.dispatchEvent(new Event('input', { bubbles: true }));
+            } finally {
+                // Earlier listeners can stop propagation before our input handler
+                // sees this synthetic event; never suppress a later native edit.
+                this._suppressNextInput = false;
+            }
             this._textareaMentions.reconcile(this._el.value);
             this._fireSelect(data);
         }
@@ -2147,6 +2173,8 @@
             this._assertAlive();
 
             if (this._isTextarea) {
+                // Programmatic value changes do not emit input events.
+                this._textareaMentions.reconcile(this._el.value);
                 return this._textareaMentions.getMentions();
             }
             return Array.from(
@@ -2184,6 +2212,7 @@
             }
 
             if (this._isTextarea) {
+                this._textareaMentions.reconcile(this._el.value);
                 const text = this._el.value;
                 const mentionText = this._opts.trigger + mentionData.name;
                 const hasCaret = this._isHostFocused();
@@ -2219,7 +2248,43 @@
                     const candidate = sel.getRangeAt(0);
                     const container = candidate.commonAncestorContainer;
                     if (container === this._el || this._el.contains(container)) {
-                        range = candidate;
+                        range = candidate.cloneRange();
+
+                        // Committed mentions are atomic. Never split their DOM
+                        // or nest a new mention inside their existing span.
+                        const ownerOf = (node) => {
+                            const element = node.nodeType === Node.ELEMENT_NODE
+                                ? node : node.parentElement;
+                            const owner = element?.closest?.('span.mention');
+                            return owner && this._el.contains(owner) &&
+                                owner.hasAttribute('data-mention-id') &&
+                                owner.hasAttribute('data-mention-name')
+                                ? owner : null;
+                        };
+                        const startOwner = ownerOf(range.startContainer);
+                        const endOwner = ownerOf(range.endContainer);
+
+                        if (range.collapsed && startOwner) {
+                            const atBeginning =
+                                (range.startContainer === startOwner.firstChild &&
+                                 range.startOffset === 0) ||
+                                (range.startContainer === startOwner && range.startOffset === 0);
+                            if (atBeginning) {
+                                range.setStartBefore(startOwner);
+                            } else {
+                                const after = startOwner.nextSibling;
+                                if (after?.nodeType === Node.TEXT_NODE &&
+                                    /^[\s\u00A0]/u.test(after.textContent)) {
+                                    range.setStart(after, 1);
+                                } else {
+                                    range.setStartAfter(startOwner);
+                                }
+                            }
+                            range.collapse(true);
+                        } else if (!range.collapsed) {
+                            if (startOwner) range.setStartBefore(startOwner);
+                            if (endOwner) range.setEndAfter(endOwner);
+                        }
                     }
                 }
 
@@ -2228,19 +2293,21 @@
                 span.dataset.mentionId = String(mentionData.id);
                 span.dataset.mentionName = mentionData.name;
                 span.textContent = this._opts.trigger + mentionData.name;
-                const space = document.createTextNode('\u00A0');
-
                 if (range) {
                     range.deleteContents();
                     range.insertNode(span);
-                    span.after(space);
                 } else {
                     this._el.appendChild(span);
-                    this._el.appendChild(space);
                 }
 
+                const next = span.nextSibling;
+                const hasSeparator = next?.nodeType === Node.TEXT_NODE &&
+                    /^[\s\u00A0]/u.test(next.textContent);
+                const separator = hasSeparator ? next : document.createTextNode('\u00A0');
+                if (!hasSeparator) span.after(separator);
+
                 this._el.focus();
-                setCaretAt(space, 1);
+                setCaretAt(separator, 1);
             }
         }
 

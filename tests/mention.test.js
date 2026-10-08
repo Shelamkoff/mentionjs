@@ -3920,3 +3920,141 @@ describe('MentionJS detached active-token editing regressions', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS committed identity and atomic insertion regressions', () => {
+    it('keeps committed contenteditable identity after an unchanged input event', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, 3);
+
+        input(editor);
+
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+        expect(span.dataset.mentionId).toBe('1');
+        expect(editor.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+
+    it('drops textarea metadata after an external value assignment without input', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 1, name: 'Alice' });
+        textarea.value = '';
+
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('reconciles external textarea value before a later push', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        mention.push({ id: 1, name: 'Alice' });
+        textarea.value = '';
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(mention.getMentions()).toEqual([
+            { id: 2, name: 'Bob', start: 0, end: 4 },
+        ]);
+        mention.destroy();
+    });
+
+    it('inserts a new contenteditable mention after an existing mention atomically', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+
+        const span = editor.querySelector('span.mention');
+        setCaret(span.firstChild, 3);
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(editor.querySelector('span.mention span.mention')).toBeNull();
+        expect(mention.getMentions()).toEqual([
+            { id: '1', name: 'Alice' },
+            { id: '2', name: 'Bob' },
+        ]);
+        expect(editor.textContent).toBe('@Alice\u00A0@Bob\u00A0');
+        mention.destroy();
+    });
+
+    it('replaces an entire mention when the programmatic selection splits it', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+        const range = document.createRange();
+        range.setStart(span.firstChild, 2);
+        range.setEnd(span.firstChild, 5);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        mention.push({ id: 2, name: 'Bob' });
+
+        expect(editor.querySelector('span.mention span.mention')).toBeNull();
+        expect(mention.getMentions()).toEqual([{ id: '2', name: 'Bob' }]);
+        expect(editor.textContent).toBe('@Bob\u00A0');
+        mention.destroy();
+    });
+
+    it('does not suppress later native input if a listener stops a synthetic commit event', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let interceptCommit = false;
+        textarea.addEventListener('input', (event) => {
+            if (interceptCommit) {
+                interceptCommit = false;
+                event.stopImmediatePropagation();
+            }
+        });
+        const searchFunction = vi.fn().mockResolvedValue([{ id: 1, name: 'Alice' }]);
+        const mention = new MentionJS(textarea, { debounceDelay: 0, searchFunction });
+        textarea.focus();
+        textarea.value = '@a';
+        textarea.setSelectionRange(2, 2);
+        input(textarea);
+        await vi.waitFor(() => expect(document.querySelector('.mention-dropdown')).not.toBeNull());
+
+        interceptCommit = true;
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        }));
+        textarea.value += '@';
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+        input(textarea);
+
+        await vi.waitFor(() => {
+            expect(searchFunction).toHaveBeenCalledWith('', null);
+        });
+        mention.destroy();
+    });
+
+    it('ends a contenteditable token when whitespace is typed into it', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const searchFunction = vi.fn().mockResolvedValue([]);
+        const mention = new MentionJS(editor, { searchFunction, debounceDelay: 0 });
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@a</span>';
+        const span = editor.firstChild;
+        mention._mentionSpan = span;
+        editor.focus();
+        span.firstChild.textContent = '@a ';
+        setCaret(span.firstChild, 3);
+        input(editor);
+
+        expect(editor.querySelector('.mention')).toBeNull();
+        expect(editor.textContent).toBe('@a ');
+        expect(searchFunction).not.toHaveBeenCalled();
+        mention.destroy();
+    });
+});
