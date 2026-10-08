@@ -732,8 +732,16 @@ try {
     await execute("document.getElementById('textarea').focus();");
     await sendKeys('@Anna Iv');
     await waitFor(
-        () => execute("return !!document.querySelector('.mention-dropdown.active') && document.getElementById('textarea').value === '@Anna Iv'"),
-        Boolean, 'Demo textarea full-name search stopped at a space'
+        () => execute(`return {
+            value: document.getElementById('textarea').value,
+            focused: document.activeElement?.id,
+            dropdown: !!document.querySelector('.mention-dropdown.active'),
+            expanded: document.getElementById('textarea').getAttribute('aria-expanded'),
+            searchStatus: document.getElementById('search-textarea').textContent,
+            selection: [document.getElementById('textarea').selectionStart, document.getElementById('textarea').selectionEnd],
+        };`),
+        (state) => state.dropdown && state.value === '@Anna Iv',
+        'Demo textarea full-name search stopped at a space'
     );
     await sendKeys('\uE007');
     const textareaMultiwordCommit = await execute(`
