@@ -408,6 +408,81 @@ try {
     await sleep(100);
     await assertEditableMentionConsistency('redo');
 
+    // 6. A caret inside a token must replace its entire suffix, while
+    // preserving the comma that follows the name.
+    await execute(`
+        window.__instance.destroy();
+        window.__queries = [];
+        const textarea = document.getElementById('textarea');
+        textarea.value = '@alice, world';
+        textarea.focus();
+        textarea.setSelectionRange(3, 3);
+        window.__instance = new MentionJS(textarea, {
+            debounceDelay: 0,
+            searchFunction: async (query) => {
+                window.__queries.push(query);
+                return [{ id: 22, name: 'Bob' }];
+            },
+        });
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    `);
+    await waitFor(
+        () => execute(`
+            return {
+                query: window.__queries.at(-1),
+                dropdown: !!document.querySelector('.mention-dropdown.active'),
+            };
+        `),
+        (value) => value.dropdown && value.query === 'al',
+        'Mid-token query failed in the native browser'
+    );
+    await sendKeys('\uE007');
+    const middleCommit = await execute(`
+        const textarea = document.getElementById('textarea');
+        return {
+            value: textarea.value,
+            caret: textarea.selectionStart,
+            mentions: window.__instance.getMentions(),
+        };
+    `);
+    assert(middleCommit.value === '@Bob, world',
+        'A mid-token commit lost punctuation or kept the old token suffix');
+    assert(middleCommit.caret === 4, 'Caret after a mid-token mention is wrong');
+    assert(middleCommit.mentions.length === 1 &&
+        middleCommit.mentions[0].id === 22,
+        'Mid-token commit did not retain the selected identity');
+
+    // 7. External .value changes without input must invalidate stale
+    // autocomplete results before a keyboard commit.
+    await execute(`
+        const textarea = document.getElementById('textarea');
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    `);
+    await waitFor(
+        () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+        Boolean,
+        'Dropdown did not open before stale-input regression'
+    );
+    await execute(`
+        const textarea = document.getElementById('textarea');
+        textarea.value = 'plain text';
+        textarea.setSelectionRange(10, 10);
+    `);
+    await sendKeys('\uE007');
+    const staleCommit = await execute(`
+        const textarea = document.getElementById('textarea');
+        return {
+            value: textarea.value,
+            mentions: window.__instance.getMentions(),
+            dropdown: !!document.querySelector('.mention-dropdown'),
+        };
+    `);
+    assert(staleCommit.value === 'plain text' &&
+        staleCommit.mentions.length === 0 && !staleCommit.dropdown,
+        'Stale results committed after a silent programmatic value change');
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
