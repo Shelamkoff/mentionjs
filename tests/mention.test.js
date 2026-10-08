@@ -4883,3 +4883,37 @@ describe('MentionJS identical native replacement identity', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS keyboard selection synchronization', () => {
+    it('does not commit an old contenteditable token when Enter beats selectionchange', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, {
+            searchFunction: async () => [{ id: 7, name: 'Alice' }],
+        });
+        editor.focus();
+        setCaret(editor, 0);
+        beforeInput(editor, 'insertText', '@');
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+        const active = editor.querySelector('span.mention.active');
+        const outside = document.createTextNode('tail');
+        editor.appendChild(outside);
+        setCaret(outside, 4);
+
+        // The browser queues selectionchange; keydown can occur first.
+        const enter = new KeyboardEvent('keydown', {
+            key: 'Enter', bubbles: true, cancelable: true,
+        });
+        editor.dispatchEvent(enter);
+
+        expect(enter.defaultPrevented).toBe(false);
+        expect(editor.textContent).toBe('@tail');
+        expect(mention.getMentions()).toEqual([]);
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        mention.destroy();
+    });
+});

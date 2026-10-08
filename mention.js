@@ -1674,6 +1674,14 @@
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
+            // Selectionchange is asynchronous in browsers. Keyboard
+            // navigation and commit must not use a former token when the
+            // caret has already moved elsewhere in the editor.
+            if (this._ui.el && span !== this._mentionSpan) {
+                this._closeDropdown();
+                return;
+            }
+
             if (e.key === 'Escape' && (this._ui.el || this._mentionSpan)) {
                 e.preventDefault();
                 this._closeDropdown();
