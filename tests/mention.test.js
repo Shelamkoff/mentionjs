@@ -5112,3 +5112,29 @@ describe('MentionJS optional multi-word mention searches', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS blur does not regain selection focus', () => {
+    it('releases a pending contenteditable span without restoring caret on blur', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@Anna\u00A0Iv</span>';
+        const textarea = document.createElement('textarea');
+        document.body.append(editor, textarea);
+        const mention = new MentionJS(editor, {
+            allowSpacesInQuery: true,
+        });
+        const span = editor.firstChild;
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span.firstChild, span.textContent.length);
+        const unwrap = vi.spyOn(mention, '_unwrapMentionSpan');
+
+        textarea.focus();
+
+        expect(document.activeElement).toBe(textarea);
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(editor.textContent).toBe('@Anna\u00A0Iv');
+        expect(unwrap).toHaveBeenCalledWith(span, null);
+        mention.destroy();
+    });
+});

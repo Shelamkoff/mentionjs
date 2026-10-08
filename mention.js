@@ -984,7 +984,9 @@
         }
 
         _bindElementEvents() {
-            this._h.blur = () => this._closeDropdown();
+            // A blur must not restore a selection inside the old host:
+            // setBaseAndExtent() can focus that editor again in browsers.
+            this._h.blur = () => this._closeDropdown(false);
 
             if (this._isTextarea) {
                 this._h.beforeinput = (e) => this._onTextareaBeforeInput(e);
@@ -2352,7 +2354,7 @@
             this._repositionDropdown();
         }
 
-        _closeDropdown() {
+        _closeDropdown(preserveSelection = true) {
             this._nativeTriggerPending = false;
             this._searchSession.cancel();
             this._setExpanded(false);
@@ -2372,7 +2374,9 @@
                 span.removeAttribute('id');
 
                 if (!isCommitted) {
-                    this._unwrapMentionSpan(span, window.getSelection());
+                    this._unwrapMentionSpan(
+                        span, preserveSelection ? window.getSelection() : null
+                    );
                 }
             }
 
