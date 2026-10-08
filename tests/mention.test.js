@@ -5285,3 +5285,43 @@ describe('MentionJS text insertion before a committed inline mention', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS native paragraph edits at saved mention boundaries', () => {
+    for (const boundary of ['editor', 'span', 'text-node', 'line-break']) {
+        it('prevents native Enter from cloning saved mention metadata at ' + boundary, () => {
+            const editor = document.createElement('div');
+            editor.setAttribute('contenteditable', 'true');
+            document.body.appendChild(editor);
+            const mention = new MentionJS(editor);
+            mention.push({ id: 'preserved', name: 'Bob' });
+            const span = editor.querySelector('span.mention');
+            editor.focus();
+
+            if (boundary === 'editor') {
+                setCaret(editor, 0);
+            } else if (boundary === 'span') {
+                setCaret(span, 0);
+            } else {
+                const prefix = document.createTextNode('prefix');
+                span.before(prefix);
+                setCaret(prefix, boundary === 'text-node' ? prefix.length : 3);
+            }
+
+            const event = beforeInput(editor, 'insertParagraph');
+            if (boundary === 'line-break') {
+                expect(event.defaultPrevented).toBe(false);
+                expect(editor.querySelector('br')).toBeNull();
+            } else {
+                expect(event.defaultPrevented).toBe(true);
+                expect(editor.querySelectorAll('br')).toHaveLength(1);
+            }
+            const stamped = editor.querySelectorAll('[data-mention-id]');
+            expect(stamped).toHaveLength(1);
+            expect(stamped[0]).toBe(span);
+            expect(mention.getMentions()).toEqual([
+                { id: 'preserved', name: 'Bob' },
+            ]);
+            mention.destroy();
+        });
+    }
+});

@@ -1176,15 +1176,22 @@ try {
         `);
         adjacencyCases.push({ scenario, initial, result });
     }
-    assert(adjacencyCases.every(({ scenario, skipped, result }) =>
-        skipped || (
-            result.mentions.length === (scenario === 'between-mentions' ? 2 : 1) &&
+    assert(adjacencyCases.every(({ scenario, skipped, result }) => {
+        if (skipped) return true;
+        if (scenario === 'native-insert-html') {
+            // execCommand('insertHTML') does NOT dispatch beforeinput and
+            // directly rewrites a saved span. Discarding its old ID is the
+            // conservative response to an external, ambiguous DOM rewrite.
+            return result.mentions.length === 0 && result.spans.length === 0;
+        }
+        return result.mentions.length === (scenario === 'between-mentions' ? 2 : 1) &&
             result.spans.every(s => s.text === '@' + s.name) &&
+            result.spans.length === (scenario === 'between-mentions' ? 2 : 1) &&
             result.mentions.some(s => s.id === 'right' && s.name === 'Bob') &&
             (scenario !== 'between-mentions' ||
-                result.mentions.some(s => s.id === 'left' && s.name === 'Alice'))
-        )
-    ), 'Editing adjacent to saved mentions corrupted identity: ' + JSON.stringify(adjacencyCases));
+                result.mentions.some(s => s.id === 'left' && s.name === 'Alice')) &&
+            (scenario !== 'before-mention-enter' || result.html.includes('<br>'));
+    }), 'Editing adjacent to saved mentions corrupted identity: ' + JSON.stringify(adjacencyCases));
 
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);

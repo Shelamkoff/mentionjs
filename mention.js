@@ -1296,10 +1296,12 @@
             const span = this._getMentionSpan(sel);
 
             if (span) {
+                if (this._insertLineBreakBeforeCommittedMention(e, sel, span)) return;
                 await this._handleInputInsideSpan(e, span, sel);
                 return;
             }
 
+            if (this._insertLineBreakBeforeCommittedMention(e, sel)) return;
             if (this._insertTextBeforeCommittedMention(e, sel)) return;
 
             if (e.inputType === 'insertText' && e.data === this._opts.trigger) {
@@ -1323,6 +1325,47 @@
             } else {
                 this._closeDropdown();
             }
+        }
+
+        _insertLineBreakBeforeCommittedMention(e, sel, span = null) {
+            // Native Enter at the boundary of an inline mention can clone the
+            // entire span (including its ID) into the new block. A library
+            // managed <br> preserves the existing mention as one atomic node.
+            if (!e.cancelable || !sel?.isCollapsed ||
+                !['insertParagraph', 'insertLineBreak'].includes(e.inputType)) {
+                return false;
+            }
+
+            let target = span;
+            if (target) {
+                if (!this._isMentionSpan(target) ||
+                    this._textOffsetInMention(target, sel) !== 0) return false;
+            } else {
+                const range = sel.getRangeAt(0);
+                const container = range.startContainer;
+                if (container === this._el ||
+                    (container.nodeType === Node.ELEMENT_NODE && this._el.contains(container))) {
+                    target = container.childNodes[range.startOffset];
+                } else if (container.nodeType === Node.TEXT_NODE &&
+                    this._el.contains(container) &&
+                    range.startOffset === container.textContent.length) {
+                    target = container.nextSibling;
+                }
+            }
+
+            if (!this._isMentionSpan(target) ||
+                !target.hasAttribute('data-mention-id') ||
+                !target.hasAttribute('data-mention-name') ||
+                target.textContent !== this._opts.trigger + target.dataset.mentionName) {
+                return false;
+            }
+
+            e.preventDefault();
+            setCaretBeforeNode(target);
+            if (this._insertBr(window.getSelection())) {
+                this._dispatchContentEditableInput(e.inputType);
+            }
+            return true;
         }
 
         _insertTextBeforeCommittedMention(e, sel) {
