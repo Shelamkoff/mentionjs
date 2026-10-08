@@ -4705,3 +4705,81 @@ describe('MentionJS silent host mutation race protection', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS reentrant custom rendering lifecycle', () => {
+    it('does not restore dropdown or ARIA state after renderItem destroys the instance', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let mention;
+        mention = new MentionJS(textarea, {
+            searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            renderItem() {
+                mention.destroy();
+                return document.createElement('div');
+            },
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => expect(mention._destroyed).toBe(true));
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.hasAttribute('aria-expanded')).toBe(false);
+    });
+
+    it('does not re-open a dropdown when renderNoResults clears the editor', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let mention;
+        mention = new MentionJS(textarea, {
+            searchFunction: async () => [],
+            renderNoResults() {
+                mention.clear();
+                return document.createElement('div');
+            },
+        });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => expect(textarea.value).toBe(''));
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('false');
+        mention.destroy();
+    });
+
+    it('does not start another page search when renderLoading destroys the instance', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const searchFunction = vi.fn().mockResolvedValue({
+            items: [{ id: 1, name: 'A' }, { id: 2, name: 'B' }],
+            nextPageUrl: '/next',
+        });
+        let mention;
+        mention = new MentionJS(textarea, {
+            searchFunction,
+            renderLoading() {
+                mention.destroy();
+                return document.createElement('div');
+            },
+        });
+
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+        await vi.waitFor(() => {
+            expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+        });
+
+        textarea.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'ArrowDown', bubbles: true, cancelable: true,
+        }));
+        expect(mention._destroyed).toBe(true);
+        expect(document.querySelector('.mention-dropdown')).toBeNull();
+        expect(searchFunction).toHaveBeenCalledTimes(1);
+    });
+});

@@ -201,23 +201,30 @@
         }
 
         render(items, selectedIndex) {
-            if (!this._el) return;
-            this._el.innerHTML = '';
+            const root = this._el;
+            if (!root) return;
+            root.innerHTML = '';
 
             if (items.length === 0) {
-                this._el.appendChild(this._buildNoResults());
+                const emptyRow = this._buildNoResults();
+                if (this._el === root) root.appendChild(emptyRow);
                 return;
             }
 
             items.forEach((item, index) => {
-                this._el.appendChild(this._buildItem(item, index, selectedIndex));
+                if (this._el !== root) return;
+                const row = this._buildItem(item, index, selectedIndex);
+                if (this._el === root) root.appendChild(row);
             });
         }
 
         appendItems(newItems, startIndex, selectedIndex) {
-            if (!this._el) return;
+            const root = this._el;
+            if (!root) return;
             newItems.forEach((item, i) => {
-                this._el.appendChild(this._buildItem(item, startIndex + i, selectedIndex));
+                if (this._el !== root) return;
+                const row = this._buildItem(item, startIndex + i, selectedIndex);
+                if (this._el === root) root.appendChild(row);
             });
         }
 
@@ -311,15 +318,17 @@
         }
 
         showLoading() {
-            if (!this._el || this._el.querySelector('.mention-loading')) return;
+            const root = this._el;
+            if (!root || root.querySelector('.mention-loading')) return;
 
             if (this._options.renderLoading) {
                 const custom = this._options.renderLoading();
+                if (this._el !== root) return;
                 if (custom instanceof HTMLElement) {
                     if (!custom.classList.contains('mention-loading')) custom.classList.add('mention-loading');
                     if (!custom.hasAttribute('role')) custom.setAttribute('role', 'status');
                     custom.setAttribute('aria-live', 'polite');
-                    this._el.appendChild(custom);
+                    root.appendChild(custom);
                     return;
                 }
             }
@@ -333,7 +342,7 @@
                     <div class="mention-info"><div class="mention-name">Loading...</div></div>
                 </div>
             `;
-            this._el.appendChild(loader);
+            root.appendChild(loader);
         }
 
         hideLoading() {
@@ -2228,9 +2237,11 @@
                 this._bindSelectionChange();
             }
 
+            const dropdown = this._ui.el;
             this._ui.hide();
             this._selectedIndex = 0;
             this._ui.render(items, 0);
+            if (this._destroyed || this._ui.el !== dropdown) return;
             this._setExpanded(true);
             this._syncActiveDescendant();
             this._repositionDropdown();
@@ -2382,7 +2393,12 @@
             const loadingGeneration = this._searchSession.beginLoadingMore();
             if (loadingGeneration === null) return;
 
+            const dropdown = this._ui.el;
             this._ui.showLoading();
+            if (this._destroyed || this._ui.el !== dropdown) {
+                this._searchSession.finishLoadingMore(loadingGeneration);
+                return;
+            }
             try {
                 const prevLen = this._searchSession.items.length;
                 const newItems = await this._search(
