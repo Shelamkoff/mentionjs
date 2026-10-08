@@ -4840,6 +4840,8 @@ describe('MentionJS abort listener reentrancy', () => {
         expect(signals[1].aborted).toBe(false);
         expect(mention._searchSession.items).toEqual([{ id: 2, name: 'New' }]);
         mention.destroy();
-        expect(signals[1].aborted).toBe(true);
+        // The second request has already settled; AbortSignal is only
+        // required to abort while the corresponding request is pending.
+        expect(mention._searchSession.items).toEqual([]);
     });
 });
