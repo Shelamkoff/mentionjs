@@ -542,6 +542,56 @@ try {
         'Backward selection was not preserved after cancelling a mention: ' +
         JSON.stringify(backwardSelection));
 
+
+    // 9. Exercise the interactive demo, not just the isolated library fixture.
+    const demoUrl = pathToFileURL(resolve(process.cwd(), 'demo.html')).href;
+    await request(base + '/url', 'POST', { url: demoUrl });
+    await waitFor(
+        () => execute("return document.documentElement.dataset.demoReady === 'true' && typeof window.MentionJS === 'function';"),
+        Boolean, 'Interactive demo did not initialize'
+    );
+    const readyDemo = await execute(
+        "return { title: document.title, editor: !!document.getElementById('editor'), textarea: !!document.getElementById('textarea'), previews: document.querySelectorAll('.mention-preview').length };"
+    );
+    assert(readyDemo.title.includes('MentionJS') &&
+        readyDemo.editor && readyDemo.textarea && readyDemo.previews === 2,
+        'Demo is missing an interactive editor or metadata preview');
+
+    await execute("document.getElementById('textarea').focus();");
+    await sendKeys('@');
+    await waitFor(
+        () => execute("return document.querySelectorAll('.mention-dropdown.active .mention-item[data-index]').length;"),
+        (value) => value === 5, 'Demo did not show the first result page'
+    );
+    await execute(
+        "const list = document.querySelector('.mention-dropdown'); list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event('scroll'));"
+    );
+    await waitFor(
+        () => execute("return document.querySelectorAll('.mention-dropdown.active .mention-item[data-index]').length;"),
+        (value) => value === 10, 'Demo did not load the second result page'
+    );
+
+    await sendKeys('\uE007');
+    const demoCommit = await execute(
+        "return { value: document.getElementById('textarea').value, mentions: JSON.parse(document.getElementById('mentions-textarea').textContent), feedback: document.getElementById('status-textarea').textContent };"
+    );
+    assert(demoCommit.value.startsWith('@Anna Ivanova') &&
+        demoCommit.mentions.length === 1 && demoCommit.mentions[0].id === 1 &&
+        demoCommit.feedback.includes('Selected'),
+        'Demo did not show committed textarea mention metadata');
+
+    const demoApi = await execute(
+        "pushMention('textarea'); const pushed = JSON.parse(document.getElementById('mentions-textarea').textContent); " +
+        "clearField('textarea'); const cleared = JSON.parse(document.getElementById('mentions-textarea').textContent); " +
+        "pushMention('editor'); const editorPushed = JSON.parse(document.getElementById('mentions-editor').textContent); " +
+        "clearField('editor'); const editorCleared = JSON.parse(document.getElementById('mentions-editor').textContent); " +
+        "return { pushed: pushed.length, cleared: cleared.length, editorPushed, editorCleared: editorCleared.length, textarea: document.getElementById('textarea').value, editorText: document.getElementById('editor').textContent };"
+    );
+    assert(demoApi.pushed === 2 && demoApi.cleared === 0 &&
+        demoApi.editorPushed.length === 1 && demoApi.editorPushed[0].id === '7' &&
+        demoApi.editorCleared === 0 && demoApi.textarea === '' && demoApi.editorText === '',
+        'Demo public API controls did not keep metadata in sync');
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
