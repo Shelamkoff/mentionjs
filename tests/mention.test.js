@@ -4928,6 +4928,7 @@ describe('MentionJS selection spanning a cancelled token', () => {
         const span = editor.querySelector('span.mention');
         const trailingText = span.nextSibling;
         mention._mentionSpan = span;
+        mention._bindSelectionChange();
         editor.focus();
 
         const selection = window.getSelection();
