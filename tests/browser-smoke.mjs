@@ -748,6 +748,114 @@ try {
         'Edited mention could not be selected a second time: ' +
         JSON.stringify(recommitted));
 
+
+    // 10c. Verify boundary editing in the native browser. These are important
+    // because a DOM text-node caret may be retargeted to the host after edit.
+    for (const scenario of [
+        { name: 'Backspace at the end of a committed mention', offset: 'end', key: '\uE003', insert: 'Z' },
+        { name: 'Delete in the middle of a committed mention', offset: 'middle', key: '\uE017', insert: 'Q' },
+    ]) {
+        await execute(`
+            window.__instance.destroy();
+            const editor = document.getElementById('editor');
+            editor.innerHTML = '';
+            editor.focus();
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            window.__instance = new MentionJS(editor, {
+                debounceDelay: 0,
+                allowSpacesInQuery: true,
+                searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+            });
+        `);
+        await sendKeys('@a');
+        await waitFor(
+            () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+            Boolean, 'No dropdown before ' + scenario.name
+        );
+        await sendKeys('\uE007');
+        await execute(`
+            const editor = document.getElementById('editor');
+            const span = editor.querySelector('span[data-mention-id]');
+            const range = document.createRange();
+            const offset = arguments[0] === 'end'
+                ? span.firstChild.textContent.length
+                : Math.floor(span.firstChild.textContent.length / 2);
+            range.setStart(span.firstChild, offset);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            editor.focus();
+        `, [scenario.offset]);
+        await sendKeys(scenario.key);
+        await waitFor(
+            () => execute("return !!document.querySelector('#editor span.mention.active')"),
+            Boolean, scenario.name + ' did not activate mention edit'
+        );
+        await sendKeys(scenario.insert);
+        const result = await waitFor(
+            () => execute(`
+                const editor = document.getElementById('editor');
+                const span = editor.querySelector('span.mention.active');
+                const sel = window.getSelection();
+                return {
+                    text: editor.textContent,
+                    active: !!span,
+                    span: span?.textContent ?? null,
+                    dropdown: !!document.querySelector('.mention-dropdown.active'),
+                    committed: window.__instance.getMentions(),
+                    focused: document.activeElement?.id,
+                    caretNode: sel.anchorNode?.nodeName,
+                    caretParent: sel.anchorNode?.parentElement?.tagName,
+                    html: editor.innerHTML,
+                    trace: window.__typingTrace.slice(-14),
+                };
+            `),
+            (v) => v.active && v.dropdown && v.span.includes(scenario.insert),
+            scenario.name + ' caused mention to unwrap after typing'
+        );
+        assert(result.committed.length === 0,
+            scenario.name + ' kept invalid committed ID');
+    }
+
+    // 10d. Delete characters in an uncommitted token, then keep typing.
+    await execute(`
+        window.__instance.destroy();
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '';
+        editor.focus();
+        const sel = window.getSelection(), range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 0,
+            allowSpacesInQuery: true,
+            searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+        });
+    `);
+    await sendKeys('@abc');
+    await sendKeys('\uE003\uE003');
+    await sendKeys('x');
+    const continuing = await waitFor(
+        () => execute(`
+            const editor = document.getElementById('editor');
+            return {
+                text: editor.textContent,
+                span: editor.querySelector('span.mention.active')?.textContent ?? null,
+                dropdown: !!document.querySelector('.mention-dropdown.active'),
+            };
+        `),
+        (v) => v.span === '@ax' && v.dropdown,
+        'Continuing to type after deleting uncommitted mention characters failed'
+    );
+
     // 11. The published demo opts in to multi-word queries in both editors.
     await request(base + '/url', 'POST', { url: demoUrl });
     await waitFor(
