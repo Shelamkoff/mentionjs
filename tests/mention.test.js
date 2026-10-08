@@ -4154,3 +4154,82 @@ describe('MentionJS dismissed search and native trigger recovery', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS explicit asynchronous and programmatic contracts', () => {
+    it('passes AbortSignal to default-argument callbacks with opt-in search context', async () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        let observed = null;
+        const callback = (query, page, context = {}) => {
+            observed = { query, page, signal: context.signal };
+            return Promise.resolve([]);
+        };
+        expect(callback.length).toBe(2);
+        const mention = new MentionJS(textarea, {
+            searchFunction: callback, provideSearchContext: true,
+        });
+        textarea.focus();
+        textarea.value = '@';
+        textarea.setSelectionRange(1, 1);
+        input(textarea);
+
+        await vi.waitFor(() => expect(observed?.signal).toBeInstanceOf(AbortSignal));
+        expect(observed.query).toBe('');
+        expect(observed.page).toBeNull();
+        mention.destroy();
+    });
+
+    it('validates new boolean options', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        expect(() => new MentionJS(textarea, { provideSearchContext: 'yes' }))
+            .toThrow(/provideSearchContext/);
+        expect(() => new MentionJS(textarea, { emitInputOnProgrammaticChange: null }))
+            .toThrow(/emitInputOnProgrammaticChange/);
+    });
+
+    it('preserves the default no-event contract for programmatic changes', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const onInput = vi.fn();
+        textarea.addEventListener('input', onInput);
+        const mention = new MentionJS(textarea);
+
+        mention.push({ id: 1, name: 'Alice' });
+        mention.clear();
+
+        expect(onInput).not.toHaveBeenCalled();
+        mention.destroy();
+    });
+
+    it('dispatches and reconciles opt-in textarea input events on push and clear', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const inputs = [];
+        textarea.addEventListener('input', () => inputs.push(textarea.value));
+        const mention = new MentionJS(textarea, { emitInputOnProgrammaticChange: true });
+
+        mention.push({ id: 1, name: 'Alice' });
+        mention.clear();
+
+        expect(inputs).toEqual(['@Alice ', '']);
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('dispatches opt-in contenteditable input events with proper input types', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const types = [];
+        editor.addEventListener('input', (event) => types.push(event.inputType));
+        const mention = new MentionJS(editor, { emitInputOnProgrammaticChange: true });
+
+        mention.push({ id: 1, name: 'Alice' });
+        mention.clear();
+
+        expect(types).toEqual(['insertReplacementText', 'deleteContent']);
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+});

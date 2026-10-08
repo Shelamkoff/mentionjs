@@ -88,6 +88,8 @@ const m = new MentionJS(element, options);
 |--------|------|---------|-------------|
 | `trigger` | `string` | `'@'` | Exactly one non-whitespace Unicode grapheme that opens the dropdown |
 | `searchFunction` | `SearchFunction` | `null` | Async search function (see below) |
+| `provideSearchContext` | `boolean` | `false` | Always pass the optional third search callback argument for callbacks with default/rest parameters |
+| `emitInputOnProgrammaticChange` | `boolean` | `false` | Dispatch `input` after `push()` and `clear()` (opt-in for backwards compatibility) |
 | `debounceDelay` | `number` | `300` | Debounce delay in ms for non-empty queries |
 | `noResultsText` | `string` | `'No results found'` | Text shown when search returns no items |
 | `dropdownClass` | `string` | `''` | Additional CSS class for the dropdown container |
@@ -128,7 +130,7 @@ You may also return a plain array of items (without pagination).
 
 Empty-string queries (`query === ''`) are executed immediately (no debounce) to show the initial list when the trigger character is typed.
 
-`context.signal` is aborted when a query is superseded, the dropdown is closed, or the instance is destroyed. Existing search functions that accept only `query` or `(query, nextPageUrl)` remain compatible.
+`context.signal` is aborted when a query is superseded, the dropdown is closed, or the instance is destroyed. Existing search functions that accept only `query` or `(query, nextPageUrl)` remain compatible. Set `provideSearchContext: true` to receive the third argument in a callback with default or rest parameters (which report a smaller JavaScript `function.length`).
 
 ### Render Functions
 
@@ -226,6 +228,8 @@ m.push({ id: 1, name: 'Alice' });
 ### `clear()`
 
 Clears all content and committed mentions.
+
+By default, `push()` and `clear()` preserve the legacy behavior of not dispatching `input`. Set `emitInputOnProgrammaticChange: true` to notify form/framework listeners of both operations. A normal dropdown selection always emits `input`.
 
 ### `destroy()`
 

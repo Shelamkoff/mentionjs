@@ -18,6 +18,8 @@
     const DEFAULTS = {
         trigger: '@',
         searchFunction: null,
+        provideSearchContext: false,
+        emitInputOnProgrammaticChange: false,
         debounceDelay: 300,
         noResultsText: 'No results found',
         dropdownClass: '',
@@ -454,7 +456,7 @@
                         const searchFunction = this._options.searchFunction;
                         const args = [query, nextPageUrl];
 
-                        if (searchFunction.length >= 3) {
+                        if (this._options.provideSearchContext || searchFunction.length >= 3) {
                             args.push({ signal: controller?.signal });
                         }
 
@@ -771,6 +773,11 @@
             }
             if (typeof this._opts.dropdownClass !== 'string') {
                 throw new Error('MentionJS: dropdownClass must be a string');
+            }
+            for (const optionName of ['provideSearchContext', 'emitInputOnProgrammaticChange']) {
+                if (typeof this._opts[optionName] !== 'boolean') {
+                    throw new Error(`MentionJS: ${optionName} must be a boolean`);
+                }
             }
 
             this._el = element;
@@ -1686,6 +1693,22 @@
             this._fireSelect(data);
         }
 
+        _notifyProgrammaticChange(inputType, data = null) {
+            if (!this._opts.emitInputOnProgrammaticChange) return;
+
+            if (this._isTextarea) {
+                this._suppressNextInput = true;
+                try {
+                    this._el.dispatchEvent(new Event('input', { bubbles: true }));
+                } finally {
+                    this._suppressNextInput = false;
+                    this._textareaMentions.reconcile(this._el.value);
+                }
+            } else {
+                this._dispatchContentEditableInput(inputType, data);
+            }
+        }
+
         _dispatchContentEditableInput(inputType = '', data = null) {
             this._suppressSyntheticContentEditableInput = true;
 
@@ -2383,6 +2406,11 @@
                 this._el.focus();
                 setCaretAt(separator, 1);
             }
+
+            this._notifyProgrammaticChange(
+                'insertReplacementText',
+                this._opts.trigger + mentionData.name
+            );
         }
 
         /**
@@ -2399,6 +2427,7 @@
                 this._el.innerHTML = '';
             }
             this._closeDropdown();
+            this._notifyProgrammaticChange('deleteContent');
         }
 
         /**

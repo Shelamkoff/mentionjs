@@ -43,6 +43,10 @@ declare namespace MentionJS {
         /** Exactly one non-whitespace Unicode grapheme. */
         trigger?: string;
         searchFunction?: SearchFunction | null;
+        /** Pass the search context even if the callback declares fewer than 3 parameters. */
+        provideSearchContext?: boolean;
+        /** Notify native input listeners after push() and clear(). Disabled for legacy compatibility. */
+        emitInputOnProgrammaticChange?: boolean;
         /** Non-negative finite delay in milliseconds. */
         debounceDelay?: number;
         noResultsText?: string;
