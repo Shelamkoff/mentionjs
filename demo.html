@@ -378,7 +378,12 @@ const textareaMention = new MentionJS(document.getElementById("textarea"), {
 });
 const instances = { editor: editorMention, textarea: textareaMention };
 for (const kind of ["editor", "textarea"]) {
-    document.getElementById(kind).addEventListener("input", () => refreshMentions(kind));
+    document.getElementById(kind).addEventListener("input", () => {
+        refreshMentions(kind);
+        // An edit can invalidate the previously committed ID; don't leave
+        // a "Selected ..." confirmation on an uncommitted mention.
+        document.getElementById("status-" + kind).textContent = "";
+    });
     refreshMentions(kind);
 }
 document.documentElement.dataset.demoReady = "true";

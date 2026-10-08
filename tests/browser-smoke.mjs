@@ -975,6 +975,28 @@ try {
         textareaMultiwordCommit.value.startsWith('@Anna Ivanova'),
         'Demo did not commit the selected full-name result: ' + JSON.stringify(textareaMultiwordCommit));
 
+
+    // Editing the selected token revokes its previous identity, so the demo
+    // should not continue to display an outdated "Selected ..." message.
+    await execute(`
+        const textarea = document.getElementById('textarea');
+        textarea.focus();
+        textarea.setSelectionRange(3, 3);
+    `);
+    await sendKeys('X');
+    const invalidated = await waitFor(
+        () => execute(`
+            return {
+                mentions: JSON.parse(document.getElementById('mentions-textarea').textContent),
+                status: document.getElementById('status-textarea').textContent,
+                value: document.getElementById('textarea').value,
+            };
+        `),
+        (state) => state.mentions.length === 0 && state.status === '' &&
+            state.value.includes('@AnXna'),
+        'Demo did not clear stale selection feedback after editing a committed ID'
+    );
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
