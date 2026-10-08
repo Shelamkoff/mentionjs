@@ -4455,3 +4455,45 @@ describe('MentionJS animation-frame lifecycle isolation', () => {
         }
     });
 });
+
+describe('MentionJS controlled input alignment invariants', () => {
+    it('rejects overlapping prefix/suffix assumptions for inconsistent beforeinput', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        mention.push({ id: 'left', name: 'Alice' });
+        mention.push({ id: 'right', name: 'Alice' });
+
+        textarea.setSelectionRange(7, 7);
+        beforeInput(textarea, 'insertText', 'X');
+        textarea.value = '@Alice ';
+        textarea.setSelectionRange(7, 7);
+        input(textarea);
+
+        // A collapsed insertion cannot remove half of the old value. Two
+        // IDs must never be projected onto the same surviving text span.
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('retains distinct identities after a prefix insertion on many mentions', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        textarea.focus();
+        for (let i = 0; i < 180; i++) {
+            mention.push({ id: i, name: 'Alice' });
+        }
+        textarea.value = '# ' + textarea.value;
+
+        const mentions = mention.getMentions();
+        expect(mentions).toHaveLength(180);
+        expect(mentions[0]).toEqual({ id: 0, name: 'Alice', start: 2, end: 8 });
+        expect(mentions[179].id).toBe(179);
+        expect(mentions.every((item, index) =>
+            index === 0 || item.start >= mentions[index - 1].end
+        )).toBe(true);
+        mention.destroy();
+    });
+});

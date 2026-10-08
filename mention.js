@@ -649,6 +649,9 @@
                 const suffix = previousText.substring(edit?.end ?? previousText.length);
                 const trustedEdit = edit &&
                     edit.value === previousText &&
+                    // The unchanged prefix and suffix must not overlap in
+                    // the new value, even when they happen to be identical.
+                    text.length >= edit.start + suffix.length &&
                     text.startsWith(previousText.substring(0, edit.start)) &&
                     text.endsWith(suffix);
 
@@ -679,12 +682,16 @@
                     // match different original mentions. Keep metadata only if
                     // both possible edit alignments preserve the same source.
                     const alternate = project(this._resolveEditFromEnd(previousText, text));
+                    const positions = new Map(
+                        alternate.map((item) => [item.mention, item])
+                    );
                     this._mentions = primary
-                        .filter((item) => alternate.some((candidate) =>
-                            candidate.mention === item.mention &&
-                            candidate.start === item.start &&
-                            candidate.end === item.end
-                        ))
+                        .filter((item) => {
+                            const candidate = positions.get(item.mention);
+                            return candidate &&
+                                candidate.start === item.start &&
+                                candidate.end === item.end;
+                        })
                         .map(({ mention, start, end }) => ({ ...mention, start, end }));
                 }
             }
