@@ -116,17 +116,14 @@
         .btn-secondary { background: #e5e7eb; color: #374151; }
         .btn-ghost { background: transparent; border: 1.5px solid #d1d5db; color: #374151; }
 
-        /* ── Status chip ── */
+        /* ── Selection feedback ── */
         .status {
-            display: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 13px;
-            background: #d1fae5;
-            color: #065f46;
+            display: block;
+            min-height: 20px;
             margin-top: 8px;
+            font-size: 13px;
+            color: #065f46;
         }
-        .status.visible { display: block; }
 
         .subtitle a { color: #165c99; text-underline-offset: 3px; }
         .editor:focus-visible, .text-area:focus-visible, .btn:focus-visible {
@@ -148,27 +145,9 @@
         .example-tips { margin: 0; padding-left: 20px; color: #374151; font-size: 13px; }
         .example-tips li { padding: 3px 0; }
         .example-tips kbd { background: #f3f6fa; padding: 2px 5px; border: 1px solid #d1d5db; border-radius: 3px; font: inherit; }
-        .card .status { display: block; min-height: 20px; background: transparent; padding: 0; }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { transition-duration: 0s !important; }
         }
-
-        /* ── API section ── */
-        .api-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-        @media (max-width: 520px) { .api-grid { grid-template-columns: 1fr; } }
-
-        .api-block {
-            background: #f8fafc;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 14px;
-        }
-
-        .api-block h3 { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; }
 
         code {
             background: #1e293b;
