@@ -283,7 +283,6 @@ m.push({ id: 1, name: 'Анна Иванова' });
 | `dist/mention.min.js` | Генерируемый минифицированный JS (`npm run build` / `prepack`) |
 | `dist/mention.min.css` | Генерируемый минифицированный CSS (`npm run build` / `prepack`) |
 | `index.html` | Интерактивное демо и главная страница GitHub Pages |
-| `.nojekyll` | Отключает Jekyll для статического сайта |
 | `.github/workflows/ci.yml` | Тесты и проверка сборки |
 | `.github/workflows/pages.yml` | Публикация GitHub Pages после успешного CI |
 | `dist/mention.d.ts` | Генерируемая копия TypeScript-типов |
@@ -306,6 +305,6 @@ MIT
 
 ## Публикация демо
 
-`index.html` — основная страница интерактивного демо; использует локальные `mention.js` и `mention.css`. В демо показаны отменяемый поиск, пагинация, выбор с клавиатуры, `push()` / `clear()` / `getMentions()`, актуальные ID упоминаний и диапазоны в textarea. `index.html` открывает демо по корневому адресу GitHub Pages.
+`index.html` — основная страница интерактивного демо; использует локальные `mention.js` и `mention.css`. В демо показаны отменяемый поиск, пагинация, выбор с клавиатуры, `push()` / `clear()` / `getMentions()`, актуальные ID упоминаний и диапазоны в textarea.
 
 Workflow **Deploy demo to Pages** публикует демо и минифицированные JS/CSS **после успешного CI, запущенного пушем в `main`**. [Сайт GitHub Pages](https://shelamkoff.github.io/mentionjs/) уже успешно опубликован. Используется **Settings → Pages → Build and deployment → Source: GitHub Actions**; ветка `gh-pages` не нужна.

@@ -37,7 +37,7 @@ jobs:
       - name: Stage the static site
         run: |
           mkdir -p _site/dist
-          cp index.html mention.js mention.css .nojekyll _site/
+          cp index.html mention.js mention.css _site/
           cp dist/mention.min.js dist/mention.min.css dist/mention.d.ts _site/dist/
           # Use the exact successfully tested revision for Pages asset URLs.
           # This avoids mixing newly deployed demo HTML with cached old JS.

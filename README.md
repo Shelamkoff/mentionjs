@@ -283,7 +283,6 @@ Import `mention.css` for default styles. All classes are customizable:
 | `dist/mention.min.js` | Generated minified JS (`npm run build` / `prepack`) |
 | `dist/mention.min.css` | Generated minified CSS (`npm run build` / `prepack`) |
 | `index.html` | Interactive demo and GitHub Pages root entrypoint |
-| `.nojekyll` | Disables Jekyll processing for the static site |
 | `.github/workflows/ci.yml` | Tests and build checks |
 | `.github/workflows/pages.yml` | GitHub Pages deployment after successful CI |
 | `dist/mention.d.ts` | Generated copy of the TypeScript declarations |
@@ -306,6 +305,6 @@ MIT
 
 ## Demo deployment
 
-`index.html` is the interactive demo and uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. `index.html` provides a GitHub Pages root entrypoint.
+`index.html` is the interactive demo and uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets.
 
 The **Deploy demo to Pages** workflow publishes the demo and minified JS/CSS **after a successful CI run triggered by a push to `main`**. The [GitHub Pages site](https://shelamkoff.github.io/mentionjs/) has been deployed successfully. Pages uses **Settings → Pages → Build and deployment → Source: GitHub Actions**; no `gh-pages` branch is required.
