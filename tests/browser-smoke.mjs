@@ -997,6 +997,93 @@ try {
         'Demo did not clear stale selection feedback after editing a committed ID'
     );
 
+
+    // Native cursor-before-trigger identity regression: typing a space and
+    // then another character must not silently decommit a saved mention.
+    await request(base + '/url', 'POST', { url: fixtureUrl });
+    const beforeTriggerCases = [];
+    for (const caretKind of ['text-start', 'span-start', 'editor-before']) {
+        await execute(`
+            const editor = document.getElementById('editor');
+            window.__instance?.destroy();
+            editor.innerHTML = '';
+            editor.focus();
+            const caret = document.createRange();
+            caret.selectNodeContents(editor);
+            caret.collapse(true);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(caret);
+            window.__instance = new MentionJS(editor, {
+                searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+            });
+            window.__instance.push({ id: 1, name: 'Anna Ivanova' });
+            const span = editor.querySelector('span.mention');
+            const start = document.createRange();
+            if (arguments[0] === 'text-start') {
+                start.setStart(span.firstChild, 0);
+            } else if (arguments[0] === 'span-start') {
+                start.setStart(span, 0);
+            } else {
+                start.setStart(editor, 0);
+            }
+            start.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(start);
+        `, [caretKind]);
+        const initial = await execute(`
+            const editor = document.getElementById('editor');
+            const sel = window.getSelection();
+            return {
+                mentions: window.__instance.getMentions(),
+                html: editor.innerHTML,
+                caret: { node: sel.anchorNode?.nodeName, offset: sel.anchorOffset },
+            };
+        `);
+        await sendKeys(' ');
+        const afterSpace = await execute(`
+            const editor = document.getElementById('editor');
+            const sel = window.getSelection();
+            return {
+                mentions: window.__instance.getMentions(),
+                html: editor.innerHTML,
+                text: editor.textContent,
+                caret: { node: sel.anchorNode?.nodeName, offset: sel.anchorOffset },
+            };
+        `);
+        await sendKeys('x');
+        const afterTyping = await execute(`
+            const editor = document.getElementById('editor');
+            const sel = window.getSelection();
+            const span = editor.querySelector('span.mention[data-mention-id]');
+            return {
+                mentions: window.__instance.getMentions(),
+                html: editor.innerHTML,
+                text: editor.textContent,
+                savedId: span?.dataset.mentionId ?? null,
+                savedName: span?.dataset.mentionName ?? null,
+                spanText: span?.textContent ?? null,
+                caret: { node: sel.anchorNode?.nodeName, offset: sel.anchorOffset },
+                focus: document.activeElement?.id,
+            };
+        `);
+        beforeTriggerCases.push({ caretKind, initial, afterSpace, afterTyping });
+    }
+    assert(beforeTriggerCases.every((c) =>
+        c.afterSpace.mentions.length === 1 &&
+        c.afterSpace.savedId !== null || c.afterSpace.mentions.length === 1
+    ), 'Inserting a space before a committed mention loses the mention: ' +
+        JSON.stringify(beforeTriggerCases));
+    assert(beforeTriggerCases.every((c) =>
+        c.afterTyping.mentions.length === 1 &&
+        c.afterTyping.mentions[0].id === '1' &&
+        c.afterTyping.savedId === '1' &&
+        c.afterTyping.savedName === 'Anna Ivanova' &&
+        c.afterTyping.spanText === '@Anna Ivanova' &&
+        c.afterTyping.text.startsWith(' x@Anna Ivanova')
+    ), 'Typing before the trigger invalidates the committed mention: ' +
+        JSON.stringify(beforeTriggerCases));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
