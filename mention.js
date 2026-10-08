@@ -1956,20 +1956,47 @@
 
         _unwrapMentionSpan(span, sel = window.getSelection()) {
             const text = span.textContent || '';
-            const selectionInside =
-                !!sel &&
-                sel.rangeCount > 0 &&
-                !!sel.anchorNode &&
-                span.contains(sel.anchorNode);
-            const offset = selectionInside
-                ? (this._textOffsetInMention(span, sel) ?? text.length)
-                : text.length;
+            const selectedRange = sel?.rangeCount ? sel.getRangeAt(0) : null;
+            const inside = (node) => !!node && (node === span || span.contains(node));
+            const textOffset = (node, offset) => {
+                const prefix = document.createRange();
+                prefix.selectNodeContents(span);
+                prefix.setEnd(node, offset);
+                return Math.min(prefix.toString().length, text.length);
+            };
+
+            // Capture both ends before replacing the element. Native Range
+            // retargeting may otherwise collapse a cross-boundary selection.
+            const captured = selectedRange && {
+                startNode: selectedRange.startContainer,
+                startOffset: selectedRange.startOffset,
+                endNode: selectedRange.endContainer,
+                endOffset: selectedRange.endOffset,
+                startInside: inside(selectedRange.startContainer),
+                endInside: inside(selectedRange.endContainer),
+            };
+            if (captured?.startInside) {
+                captured.startOffset = textOffset(captured.startNode, captured.startOffset);
+            }
+            if (captured?.endInside) {
+                captured.endOffset = textOffset(captured.endNode, captured.endOffset);
+            }
 
             const textNode = document.createTextNode(text);
             span.replaceWith(textNode);
 
-            if (selectionInside) {
-                setCaretAt(textNode, Math.min(offset, text.length));
+            if (captured && (captured.startInside || captured.endInside)) {
+                const range = document.createRange();
+                range.setStart(
+                    captured.startInside ? textNode : captured.startNode,
+                    captured.startOffset
+                );
+                range.setEnd(
+                    captured.endInside ? textNode : captured.endNode,
+                    captured.endOffset
+                );
+                sel.removeAllRanges();
+                sel.addRange(range);
             }
 
             if (this._mentionSpan === span) this._mentionSpan = null;
