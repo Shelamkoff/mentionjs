@@ -343,8 +343,12 @@
         }
 
         position({ top, left, cursorY, lineHeight = 20 }) {
-            if (!this._el) return;
+            const element = this._el;
+            if (!element) return;
             requestAnimationFrame(() => {
+                // The dropdown may have been destroyed and remounted while
+                // waiting for the frame. Never position a different element.
+                if (this._el !== element) return;
                 this._positionRaw({ top, left, cursorY, lineHeight });
             });
         }
@@ -2228,11 +2232,13 @@
         }
 
         _positionNearCursorInTextarea() {
+            const dropdown = this._ui.el;
+            const tokenStart = this._mentionStart;
             requestAnimationFrame(() => {
-                if (!this._ui.el) return;
+                if (!dropdown || this._ui.el !== dropdown || this._mentionStart !== tokenStart) return;
 
                 const el = this._el;
-                const cursorPos = this._mentionStart !== null ? this._mentionStart : el.selectionStart;
+                const cursorPos = tokenStart !== null ? tokenStart : el.selectionStart;
                 const textBeforeCursor = el.value.substring(0, cursorPos);
                 const cs = window.getComputedStyle(el);
 

@@ -4403,3 +4403,55 @@ describe('MentionJS cross-token input focus synchronization', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS animation-frame lifecycle isolation', () => {
+    it('does not reposition a remounted dropdown using an old scheduled frame', () => {
+        const scheduled = [];
+        const nativeRaf = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (fn) => {
+            scheduled.push(fn);
+            return scheduled.length;
+        };
+        try {
+            const textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            const mention = new MentionJS(textarea);
+            const ui = mention._ui;
+            ui.mount('textarea');
+            ui.position({ top: 100, left: 120, cursorY: 100 });
+            ui.mount('textarea');
+
+            const newest = ui.el;
+            expect(newest.style.top).toBe('');
+            scheduled.shift()();
+            expect(newest.style.top).toBe('');
+            mention.destroy();
+        } finally {
+            globalThis.requestAnimationFrame = nativeRaf;
+        }
+    });
+
+    it('ignores stale textarea geometry frames after the active token changes', () => {
+        const scheduled = [];
+        const nativeRaf = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (fn) => {
+            scheduled.push(fn);
+            return scheduled.length;
+        };
+        try {
+            const textarea = document.createElement('textarea');
+            document.body.appendChild(textarea);
+            const mention = new MentionJS(textarea);
+            mention._ui.mount('textarea');
+            mention._mentionStart = 0;
+            mention._positionNearCursorInTextarea();
+            mention._mentionStart = 6;
+            scheduled.shift()();
+
+            expect(mention._ui.el.style.top).toBe('');
+            mention.destroy();
+        } finally {
+            globalThis.requestAnimationFrame = nativeRaf;
+        }
+    });
+});
