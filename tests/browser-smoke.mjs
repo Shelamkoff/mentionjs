@@ -856,6 +856,56 @@ try {
         'Continuing to type after deleting uncommitted mention characters failed'
     );
 
+
+    // 10e. Deleting from the default post-commit caret should not cause
+    // subsequent typing to discard the existing mention span.
+    for (const backspaceCount of [1, 2]) {
+        await execute(`
+            window.__instance.destroy();
+            const editor = document.getElementById('editor');
+            editor.innerHTML = '';
+            editor.focus();
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            window.__instance = new MentionJS(editor, {
+                debounceDelay: 0,
+                allowSpacesInQuery: true,
+                searchFunction: async () => [{ id: 1, name: 'Anna Ivanova' }],
+            });
+        `);
+        await sendKeys('@a');
+        await waitFor(
+            () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+            Boolean, 'Could not select mention for trailing-caret Backspace test'
+        );
+        await sendKeys('\uE007');
+        await sendKeys('\uE003'.repeat(backspaceCount));
+        await sendKeys('X');
+        const state = await execute(`
+            const editor = document.getElementById('editor');
+            const sel = window.getSelection();
+            const span = editor.querySelector('span.mention');
+            return {
+                text: editor.textContent,
+                html: editor.innerHTML,
+                span: span?.outerHTML ?? null,
+                committed: window.__instance.getMentions(),
+                caretNode: sel.anchorNode?.nodeName,
+                caretParent: sel.anchorNode?.parentElement?.tagName,
+                caretOffset: sel.anchorOffset,
+                focused: document.activeElement?.id,
+                trace: window.__typingTrace.slice(-20),
+            };
+        `);
+        assert(state.text.includes('X') && state.span && state.focused === 'editor',
+            backspaceCount + ' Backspace key(s) after commit dropped the span: ' +
+            JSON.stringify(state));
+    }
+
     // 11. The published demo opts in to multi-word queries in both editors.
     await request(base + '/url', 'POST', { url: demoUrl });
     await waitFor(
