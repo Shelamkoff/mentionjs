@@ -479,9 +479,12 @@ try {
             dropdown: !!document.querySelector('.mention-dropdown'),
         };
     `);
-    assert(staleCommit.value === 'plain text' &&
+    // If selectionchange closes the dropdown before Enter, a textarea may
+    // accept Enter as an ordinary newline. What must never happen is
+    // committing the stale mention or reopening its suggestion list.
+    assert(/^plain text(?:\r?\n)?$/u.test(staleCommit.value) &&
         staleCommit.mentions.length === 0 && !staleCommit.dropdown,
-        'Stale results committed after a silent programmatic value change');
+        'Stale result after silent host edit: ' + JSON.stringify(staleCommit));
 
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
