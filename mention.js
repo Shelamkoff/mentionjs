@@ -1718,7 +1718,8 @@
             const before = this._el.value.substring(0, this._mentionStart);
             const after = this._el.value.substring(this._mentionEnd);
             const hasSeparator = /^[\s\u00A0]/.test(after);
-            const separator = hasSeparator ? '' : ' ';
+            const hasPunctuation = /^[,;!?]/u.test(after);
+            const separator = (hasSeparator || hasPunctuation) ? '' : ' ';
 
             this._el.value = before + mentionText + separator + after;
             this._textareaMentions.replaceRange(
@@ -2174,7 +2175,7 @@
             // The query ends at the caret, but accepting a result must
             // replace the whole token, including characters after the caret.
             let end = position;
-            while (end < text.length && !/\s/u.test(text[end])) end++;
+            while (end < text.length && !/[\s,;!?]/u.test(text[end])) end++;
 
             return { start: triggerIdx, end, query };
         }
@@ -2435,7 +2436,8 @@
                 const end = hasCaret ? (this._el.selectionEnd ?? start) : start;
                 const after = text.substring(end);
                 const hasSeparator = /^[\s\u00A0]/.test(after);
-                const separator = hasSeparator ? '' : ' ';
+                const hasPunctuation = /^[,;!?]/u.test(after);
+                const separator = (hasSeparator || hasPunctuation) ? '' : ' ';
                 const insertion = mentionText + separator;
 
                 this._el.value = text.substring(0, start) + insertion + after;

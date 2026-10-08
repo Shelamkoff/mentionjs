@@ -4601,9 +4601,29 @@ describe('MentionJS textarea replacement across the caret', () => {
         textarea.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Enter', bubbles: true, cancelable: true,
         }));
-        expect(textarea.value).toBe('@Jo rest');
+        expect(textarea.value).toBe('@Jo, rest');
         expect(mention.getMentions()).toEqual([
             { id: 5, name: 'Jo', start: 0, end: 3 },
+        ]);
+        expect(textarea.selectionStart).toBe(3);
+        mention.destroy();
+    });
+});
+
+describe('MentionJS punctuation after committed or pushed mentions', () => {
+    it('does not insert a space before punctuation when pushing at the caret', () => {
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        const mention = new MentionJS(textarea);
+        textarea.value = 'hello, world';
+        textarea.focus();
+        textarea.setSelectionRange(5, 5);
+        mention.push({ id: 1, name: 'Alice' });
+
+        expect(textarea.value).toBe('hello@Alice, world');
+        expect(textarea.selectionStart).toBe(11);
+        expect(mention.getMentions()).toEqual([
+            { id: 1, name: 'Alice', start: 5, end: 11 },
         ]);
         mention.destroy();
     });
