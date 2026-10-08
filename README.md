@@ -282,6 +282,8 @@ The `dist/` directory is generated and is not stored in Git. It is included in p
 
 Requires modern `beforeinput`, Selection/Range, and AbortController support. Native CI smoke tests run source and the minified npm build in current Chrome and Firefox. Safari/WebKit is not part of the automated browser matrix. IE11 is not supported.
 
+For complete Unicode grapheme segmentation, use an environment with `Intl.Segmenter`. When it is absent, MentionJS uses a best-effort built-in fallback for common combining marks and emoji sequences; it does not implement all Unicode grapheme-break rules (including some Indic conjuncts and Hangul Jamo).
+
 ## License
 
 MIT
