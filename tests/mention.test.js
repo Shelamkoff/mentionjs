@@ -4497,3 +4497,58 @@ describe('MentionJS controlled input alignment invariants', () => {
         mention.destroy();
     });
 });
+
+describe('MentionJS element-boundary caret offsets', () => {
+    it('deletes the last character when caret is at the element-child end boundary', async () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor, { searchFunction: async () => [] });
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+
+        setCaret(span, 1); // Child index 1 = after the entire text node.
+        const event = beforeInput(editor, 'deleteContentBackward');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(span.textContent).toBe('@Alic');
+        expect(mention.getMentions()).toEqual([]);
+        mention.destroy();
+    });
+
+    it('moves IME out of a committed mention at the element-child end boundary', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        mention.push({ id: 1, name: 'Alice' });
+        const span = editor.querySelector('span.mention');
+        const trailing = span.nextSibling;
+
+        setCaret(span, 1);
+        editor.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+        expect(window.getSelection().anchorNode).toBe(trailing);
+        expect(window.getSelection().anchorOffset).toBe(0);
+        expect(mention.getMentions()).toEqual([{ id: '1', name: 'Alice' }]);
+        mention.destroy();
+    });
+
+    it('preserves the zero-offset caret when unwrapping an unfinished span', () => {
+        const editor = document.createElement('div');
+        editor.setAttribute('contenteditable', 'true');
+        editor.innerHTML = '<span class="mention active" data-mentionjs-token="true">@ab</span>';
+        document.body.appendChild(editor);
+        const mention = new MentionJS(editor);
+        const span = editor.querySelector('span.mention');
+        mention._mentionSpan = span;
+        editor.focus();
+        setCaret(span, 0);
+        mention._closeDropdown();
+
+        expect(editor.textContent).toBe('@ab');
+        expect(editor.querySelector('span.mention')).toBeNull();
+        expect(window.getSelection().anchorNode).toBe(editor.firstChild);
+        expect(window.getSelection().anchorOffset).toBe(0);
+        mention.destroy();
+    });
+});

@@ -1209,13 +1209,8 @@
             const span = this._getMentionSpan(sel);
             if (!span || !sel?.isCollapsed) return;
 
-            const node = sel.anchorNode;
-            const offset = sel.anchorOffset;
             const text = span.textContent || '';
-            const cursor =
-                node?.nodeType === Node.TEXT_NODE && node.parentElement === span
-                    ? offset
-                    : (node === span ? offset : null);
+            const cursor = this._textOffsetInMention(span, sel);
 
             if (cursor === 0) {
                 // Move the selection while the token is still connected.
@@ -1352,14 +1347,10 @@
         async _handleInputInsideSpan(e, span, sel) {
             if (!this._inDOM(span)) { this._closeDropdown(); return; }
 
-            const anchorNode = sel.anchorNode;
-            const anchorOffset = sel.anchorOffset;
             const isActive = span.classList.contains('active');
 
             const spanText = span.textContent;
-            const cursorInText = (anchorNode?.nodeType === Node.TEXT_NODE && anchorNode.parentElement === span)
-                ? anchorOffset
-                : (anchorNode === span ? anchorOffset : null);
+            const cursorInText = this._textOffsetInMention(span, sel);
 
             const isAtStart = cursorInText === 0;
             const isAtEnd = cursorInText === spanText.length;
@@ -1894,6 +1885,21 @@
             delete span.dataset.mentionName;
         }
 
+        _textOffsetInMention(span, sel) {
+            if (!sel?.rangeCount) return null;
+            const range = sel.getRangeAt(0);
+            const container = range.startContainer;
+            if (container !== span && !span.contains(container)) return null;
+
+            // An Element-node boundary offset counts children, not UTF-16
+            // characters. A Range measures the same text coordinates for
+            // text nodes, element boundaries, and nested formatted nodes.
+            const prefix = document.createRange();
+            prefix.selectNodeContents(span);
+            prefix.setEnd(container, range.startOffset);
+            return prefix.toString().length;
+        }
+
         _unwrapMentionSpan(span, sel = window.getSelection()) {
             const text = span.textContent || '';
             const selectionInside =
@@ -1901,10 +1907,9 @@
                 sel.rangeCount > 0 &&
                 !!sel.anchorNode &&
                 span.contains(sel.anchorNode);
-            const offset =
-                selectionInside && sel.anchorNode.nodeType === Node.TEXT_NODE
-                    ? sel.anchorOffset
-                    : text.length;
+            const offset = selectionInside
+                ? (this._textOffsetInMention(span, sel) ?? text.length)
+                : text.length;
 
             const textNode = document.createTextNode(text);
             span.replaceWith(textNode);
