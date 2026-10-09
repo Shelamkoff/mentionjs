@@ -930,6 +930,7 @@
             this._nativeTriggerPending = false;
             this._nativeBoundaryMarker = null;
             this._dismissedTextareaStart = null;
+            this._isComposing = false;
             this._destroyed = false;
 
             this._h = {};
@@ -1008,7 +1009,12 @@
                 this._closeDropdown(false);
             };
 
+            this._h.compositionstart = () => { this._isComposing = true; };
+            this._h.compositionend = () => { this._isComposing = false; };
+            this._el.addEventListener('compositionend', this._h.compositionend);
+
             if (this._isTextarea) {
+                this._el.addEventListener('compositionstart', this._h.compositionstart);
                 this._h.beforeinput = (e) => this._onTextareaBeforeInput(e);
                 this._h.input = () => this._onTextareaInput();
                 this._h.keydown = (e) => this._onTextareaKeydown(e);
@@ -1019,7 +1025,10 @@
                 this._h.beforeinput = (e) => this._onBeforeInput(e);
                 this._h.input = () => this._onContentEditableInput();
                 this._h.keydown = (e) => this._onContentEditableKeydown(e);
-                this._h.compositionstart = () => this._onContentEditableCompositionStart();
+                this._h.compositionstart = () => {
+                    this._isComposing = true;
+                    this._onContentEditableCompositionStart();
+                };
                 this._el.addEventListener('beforeinput', this._h.beforeinput);
                 this._el.addEventListener('input', this._h.input);
                 this._el.addEventListener('keydown', this._h.keydown);
@@ -1030,7 +1039,9 @@
         }
 
         _unbindElementEvents() {
+            this._el.removeEventListener('compositionend', this._h.compositionend);
             if (this._isTextarea) {
+                this._el.removeEventListener('compositionstart', this._h.compositionstart);
                 this._el.removeEventListener('beforeinput', this._h.beforeinput);
                 this._el.removeEventListener('input', this._h.input);
                 this._el.removeEventListener('keydown', this._h.keydown);
@@ -1248,6 +1259,8 @@
         }
 
         _onTextareaKeydown(e) {
+            // Enter and navigation keys may belong to an active IME conversion.
+            if (e.isComposing || this._isComposing) return;
             if (e.key === 'Escape' && (this._ui.el || this._mentionStart !== null)) {
                 e.preventDefault();
                 this._dismissedTextareaStart = this._mentionStart;
@@ -1805,6 +1818,8 @@
         }
 
         async _onContentEditableKeydown(e) {
+            // Do not intercept Enter, Escape or arrows while an IME owns the keys.
+            if (e.isComposing || this._isComposing) return;
             const sel = window.getSelection();
             const span = this._getMentionSpan(sel);
 
