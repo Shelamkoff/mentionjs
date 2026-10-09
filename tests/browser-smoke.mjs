@@ -1480,6 +1480,130 @@ try {
         punctuation.textareaIds.length === 1 && punctuation.textareaIds[0].id === 3,
         'Updated punctuation demo failed: ' + JSON.stringify(punctuation));
 
+
+    // Confirm that insertion and selection use existing whitespace or punctuation
+    // even when the following visible text is nested in inline formatting.
+    for (const mode of ['push', 'commit']) {
+        for (const following of [',tail', ' rest']) {
+            await request(base + '/url', 'POST', { url: fixtureUrl });
+            const state = await execute(`
+                const editor = document.getElementById('editor');
+                const mode = arguments[0];
+                const following = arguments[1];
+                const suffix = '<em><strong>' + following + '</strong></em>';
+                editor.innerHTML = (mode === 'commit'
+                    ? '<span class="mention active" data-mentionjs-token="true">@a</span>'
+                    : '') + suffix;
+                editor.focus();
+                window.__instance = new MentionJS(editor);
+                const sel = window.getSelection(), range = document.createRange();
+                if (mode === 'push') {
+                    range.setStart(editor, 0);
+                    range.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    window.__instance.push({ id: 1, name: 'Alice' });
+                } else {
+                    const span = editor.querySelector('span.mention.active');
+                    range.setStart(span.firstChild, 2);
+                    range.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    window.__instance._mentionSpan = span;
+                    window.__instance._commitSpanMention({ id: 1, name: 'Alice' });
+                }
+                return {
+                    text: editor.textContent,
+                    committed: window.__instance.getMentions(),
+                    caretText: sel.anchorNode?.textContent,
+                    caretOffset: sel.anchorOffset,
+                    caretParent: sel.anchorNode?.parentElement?.tagName,
+                };
+            `, [mode, following]);
+            assert(state.text === '@Alice' + following &&
+                state.committed.length === 1 &&
+                state.committed[0].id === '1' &&
+                state.caretText === following &&
+                state.caretParent === 'STRONG' &&
+                state.caretOffset === (following[0] === ',' ? 0 : 1),
+                'Formatted separator regression in ' + mode + ': ' +
+                JSON.stringify({ following, state }));
+        }
+    }
+
+    // A blur without compositionend must not leave keyboard selection disabled.
+    for (const kind of ['textarea', 'editor']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        await execute(`
+            const host = document.getElementById(arguments[0]);
+            host.focus();
+            window.__instance = new MentionJS(host, {
+                debounceDelay: 0,
+                searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            });
+            if (host.tagName === 'TEXTAREA') {
+                host.value = '@';
+                host.setSelectionRange(1, 1);
+                host.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+                const sel = window.getSelection(), range = document.createRange();
+                range.setStart(host, 0);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                host.dispatchEvent(new InputEvent('beforeinput', {
+                    inputType: 'insertText', data: '@', bubbles: true, cancelable: true,
+                }));
+            }
+        `, [kind]);
+        await waitFor(
+            () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+            Boolean, 'Abandoned IME fixture did not open suggestions'
+        );
+        const afterBlur = await execute(`
+            const host = document.getElementById(arguments[0]);
+            host.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            host.dispatchEvent(new Event('blur'));
+            const composing = window.__instance._isComposing;
+            host.focus();
+            if (host.tagName === 'TEXTAREA') {
+                host.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+                host.textContent = '';
+                const sel = window.getSelection(), range = document.createRange();
+                range.setStart(host, 0);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                host.dispatchEvent(new InputEvent('beforeinput', {
+                    inputType: 'insertText', data: '@', bubbles: true, cancelable: true,
+                }));
+            }
+            return { composing };
+        `, [kind]);
+        assert(afterBlur.composing === false,
+            'IME composition state persisted after blur in ' + kind);
+        await waitFor(
+            () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+            Boolean, 'Search did not reopen after abandoned IME in ' + kind
+        );
+        const selection = await execute(`
+            const host = document.getElementById(arguments[0]);
+            const enter = new KeyboardEvent('keydown', {
+                key: 'Enter', bubbles: true, cancelable: true,
+            });
+            host.dispatchEvent(enter);
+            return {
+                prevented: enter.defaultPrevented,
+                mentions: window.__instance.getMentions(),
+            };
+        `, [kind]);
+        assert(selection.prevented && selection.mentions.length === 1 &&
+            selection.mentions[0].name === 'Alice',
+            'Keyboard selection did not recover from IME blur in ' +
+            kind + ': ' + JSON.stringify(selection));
+    }
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
