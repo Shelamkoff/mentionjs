@@ -149,6 +149,12 @@
         ));
     }
 
+    function followingSeparator(text) {
+        if (/^[\s\u00A0]/u.test(text)) return 'space';
+        if (/^[,;!?]/u.test(text)) return 'punctuation';
+        return 'missing';
+    }
+
     function setCaretAt(node, offset) {
         const sel = window.getSelection();
         const range = document.createRange();
@@ -1919,9 +1925,8 @@
             const mentionText = this._opts.trigger + data.name;
             const before = this._el.value.substring(0, this._mentionStart);
             const after = this._el.value.substring(this._mentionEnd);
-            const hasSeparator = /^[\s\u00A0]/.test(after);
-            const hasPunctuation = /^[,;!?]/u.test(after);
-            const separator = (hasSeparator || hasPunctuation) ? '' : ' ';
+            const separatorKind = followingSeparator(after);
+            const separator = separatorKind === 'missing' ? ' ' : '';
 
             this._el.value = before + mentionText + separator + after;
             this._textareaMentions.replaceRange(
@@ -1937,7 +1942,8 @@
             );
             this._textareaMentions.acknowledge(this._el.value);
 
-            const newPos = this._mentionStart + mentionText.length + (hasSeparator ? 1 : separator.length);
+            const newPos = this._mentionStart + mentionText.length +
+                (separatorKind === 'space' ? 1 : separator.length);
             this._el.setSelectionRange(newPos, newPos);
             this._el.focus();
             this._closeDropdown();
@@ -1966,10 +1972,15 @@
             span.removeAttribute('id');
 
             const next = span.nextSibling;
-            const hasSpace = next?.nodeType === Node.TEXT_NODE && /^[\s\u00A0]/.test(next.textContent);
+            const separatorKind = followingSeparator(
+                next?.nodeType === Node.TEXT_NODE ? next.textContent : ''
+            );
 
-            if (hasSpace) {
+            if (separatorKind === 'space') {
                 setCaretAt(next, 1);
+            } else if (separatorKind === 'punctuation') {
+                // Keep the caret outside the committed span, before punctuation.
+                setCaretAt(next, 0);
             } else {
                 const space = document.createTextNode('\u00A0');
                 span.after(space);
@@ -2753,9 +2764,8 @@
                 const start = hasCaret ? (this._el.selectionStart ?? text.length) : text.length;
                 const end = hasCaret ? (this._el.selectionEnd ?? start) : start;
                 const after = text.substring(end);
-                const hasSeparator = /^[\s\u00A0]/.test(after);
-                const hasPunctuation = /^[,;!?]/u.test(after);
-                const separator = (hasSeparator || hasPunctuation) ? '' : ' ';
+                const separatorKind = followingSeparator(after);
+                const separator = separatorKind === 'missing' ? ' ' : '';
                 const insertion = mentionText + separator;
 
                 this._el.value = text.substring(0, start) + insertion + after;
@@ -2771,7 +2781,7 @@
                     }
                 );
 
-                const pos = start + insertion.length + (hasSeparator ? 1 : 0);
+                const pos = start + insertion.length + (separatorKind === 'space' ? 1 : 0);
                 this._textareaMentions.acknowledge(this._el.value);
                 this._el.setSelectionRange(pos, pos);
                 this._el.focus();
@@ -2836,13 +2846,16 @@
                 }
 
                 const next = span.nextSibling;
-                const hasSeparator = next?.nodeType === Node.TEXT_NODE &&
-                    /^[\s\u00A0]/u.test(next.textContent);
-                const separator = hasSeparator ? next : document.createTextNode('\u00A0');
-                if (!hasSeparator) span.after(separator);
+                const separatorKind = followingSeparator(
+                    next?.nodeType === Node.TEXT_NODE ? next.textContent : ''
+                );
+                const separator = separatorKind === 'missing'
+                    ? document.createTextNode('\u00A0')
+                    : next;
+                if (separatorKind === 'missing') span.after(separator);
 
                 this._el.focus();
-                setCaretAt(separator, 1);
+                setCaretAt(separator, separatorKind === 'punctuation' ? 0 : 1);
             }
 
             this._notifyProgrammaticChange(
