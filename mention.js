@@ -34,6 +34,15 @@
     const activeInstances = new WeakMap();
     const SEARCH_CANCELLED = Symbol('MentionJS search cancelled');
     const SEARCH_FAILED = Symbol('MentionJS search failed');
+
+    function warnSafely(message, detail) {
+        try {
+            console.warn(message, detail);
+        } catch (_) {
+            // A failing logging hook must not break editing or async cleanup.
+        }
+    }
+
     const graphemeSegmenter = typeof Intl?.Segmenter === 'function'
         ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
         : null;
@@ -240,7 +249,7 @@
                 // Match the original callback receiver (the options object).
                 return this._options[name].apply(this._options, args);
             } catch (error) {
-                console.warn('MentionJS: ' + name + ' failed', error);
+                warnSafely('MentionJS: ' + name + ' failed', error);
                 return null;
             }
         }
@@ -551,47 +560,54 @@
                 ) {
                     return null;
                 }
-                console.warn('MentionJS: search failed', err);
+                warnSafely('MentionJS: search failed', err);
                 return SEARCH_FAILED;
             }
 
             if (requestId !== this._requestId) return null;
 
-            const isArrayResult = Array.isArray(raw);
-            const isObjectResult =
-                raw !== null &&
-                typeof raw === 'object' &&
-                !isArrayResult &&
-                Object.prototype.hasOwnProperty.call(raw, 'items');
+            try {
+                const isArrayResult = Array.isArray(raw);
+                const isObjectResult =
+                    raw !== null &&
+                    typeof raw === 'object' &&
+                    !isArrayResult &&
+                    Object.prototype.hasOwnProperty.call(raw, 'items');
 
-            if (!isArrayResult && !isObjectResult) {
-                console.warn('MentionJS: searchFunction returned an invalid result', raw);
+                if (!isArrayResult && !isObjectResult) {
+                    warnSafely('MentionJS: searchFunction returned an invalid result', raw);
+                    return SEARCH_FAILED;
+                }
+
+                const items = isArrayResult ? raw : raw.items;
+                const next = isArrayResult ? null : (raw.nextPageUrl ?? null);
+                const validItems =
+                    Array.isArray(items) &&
+                    items.every((item) => (
+                        item !== null &&
+                        typeof item === 'object' &&
+                        (typeof item.id === 'string' ||
+                         (typeof item.id === 'number' && Number.isFinite(item.id))) &&
+                        typeof item.name === 'string' &&
+                        (item.avatar === undefined || typeof item.avatar === 'string') &&
+                        (item.details === undefined || typeof item.details === 'string')
+                    ));
+
+                if (!validItems || (next !== null && typeof next !== 'string')) {
+                    warnSafely('MentionJS: searchFunction returned an invalid result', raw);
+                    return SEARCH_FAILED;
+                }
+
+                this._nextPageUrl = next;
+                this._items = nextPageUrl ? [...this._items, ...items] : items;
+
+                return items;
+            } catch (error) {
+                // Reactive/proxy results may throw from property access or iteration.
+                // Treat them as invalid results instead of rejecting the input handler.
+                warnSafely('MentionJS: searchFunction returned an invalid result', error);
                 return SEARCH_FAILED;
             }
-
-            const items = isArrayResult ? raw : raw.items;
-            const next = isArrayResult ? null : (raw.nextPageUrl ?? null);
-            const validItems =
-                Array.isArray(items) &&
-                items.every((item) => (
-                    item !== null &&
-                    typeof item === 'object' &&
-                    (typeof item.id === 'string' ||
-                     (typeof item.id === 'number' && Number.isFinite(item.id))) &&
-                    typeof item.name === 'string' &&
-                    (item.avatar === undefined || typeof item.avatar === 'string') &&
-                    (item.details === undefined || typeof item.details === 'string')
-                ));
-
-            if (!validItems || (next !== null && typeof next !== 'string')) {
-                console.warn('MentionJS: searchFunction returned an invalid result', raw);
-                return SEARCH_FAILED;
-            }
-
-            this._nextPageUrl = next;
-            this._items = nextPageUrl ? [...this._items, ...items] : items;
-
-            return items;
         }
 
         cancel() {
@@ -2700,7 +2716,7 @@
                 if (newItems === null || newItems === SEARCH_FAILED) return;
                 this._ui.appendItems(newItems, prevLen, this._selectedIndex);
             } catch (err) {
-                console.warn('MentionJS: load more failed', err);
+                warnSafely('MentionJS: load more failed', err);
             } finally {
                 if (this._searchSession.finishLoadingMore(loadingGeneration)) {
                     this._ui.hideLoading();
