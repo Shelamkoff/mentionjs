@@ -1450,7 +1450,7 @@ try {
         assert(state.prevented && state.bob === '@Bob' &&
             (direction === 'backward'
                 ? state.alice === '@Alice' && state.count === 2
-                : state.alice === undefined && state.count === 1),
+                : state.alice == null && state.count === 1),
             'Formatted boundary regression: ' + JSON.stringify({ direction, state }));
     }
 
