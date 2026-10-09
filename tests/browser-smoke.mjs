@@ -1350,6 +1350,136 @@ try {
     ), 'Long/Unicode input before saved mention invalidated metadata: ' +
         JSON.stringify(nativeBoundaryTyping));
 
+
+    // Browser-level regression: a composing Enter must not select a mention.
+    for (const kind of ['textarea', 'editor']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        await execute(`
+            const host = document.getElementById(arguments[0]);
+            host.focus();
+            window.__instance = new MentionJS(host, {
+                debounceDelay: 0,
+                searchFunction: async () => [{ id: 1, name: 'Alice' }],
+            });
+            if (host.tagName === 'TEXTAREA') {
+                host.value = '@';
+                host.setSelectionRange(1, 1);
+                host.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+                const sel = window.getSelection(), range = document.createRange();
+                range.setStart(host, 0);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                host.dispatchEvent(new InputEvent('beforeinput', {
+                    inputType: 'insertText', data: '@',
+                    cancelable: true, bubbles: true,
+                }));
+            }
+        `, [kind]);
+        await waitFor(
+            () => execute("return !!document.querySelector('.mention-dropdown.active')"),
+            Boolean, 'IME fixture did not open a dropdown'
+        );
+        const state = await execute(`
+            const host = document.getElementById(arguments[0]);
+            const composing = new KeyboardEvent('keydown', {
+                key: 'Enter', bubbles: true, cancelable: true, isComposing: true,
+            });
+            host.dispatchEvent(composing);
+            host.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            const fallback = new KeyboardEvent('keydown', {
+                key: 'Enter', bubbles: true, cancelable: true,
+            });
+            host.dispatchEvent(fallback);
+            const before = window.__instance.getMentions().length;
+            host.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+            const ordinary = new KeyboardEvent('keydown', {
+                key: 'Enter', bubbles: true, cancelable: true,
+            });
+            host.dispatchEvent(ordinary);
+            return {
+                composingPrevented: composing.defaultPrevented,
+                fallbackPrevented: fallback.defaultPrevented,
+                before,
+                ordinaryPrevented: ordinary.defaultPrevented,
+                after: window.__instance.getMentions().length,
+            };
+        `, [kind]);
+        assert(!state.composingPrevented && !state.fallbackPrevented &&
+            state.before === 0 && state.ordinaryPrevented && state.after === 1,
+            'IME Enter regression in ' + kind + ': ' + JSON.stringify(state));
+    }
+
+    // Nested formatted mentions keep identity on Backspace and Forward Delete.
+    for (const direction of ['backward', 'forward']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        const state = await execute(`
+            const editor = document.getElementById('editor');
+            const fmt = '<strong><span class="mention" data-mention-id="a" data-mention-name="Alice">@Alice</span></strong>';
+            const bob = '<span class="mention" data-mention-id="b" data-mention-name="Bob">@Bob</span>';
+            editor.innerHTML = arguments[0] === 'backward' ? fmt + bob : bob + fmt;
+            editor.focus();
+            window.__instance = new MentionJS(editor, {
+                debounceDelay: 0, searchFunction: async () => [],
+            });
+            const node = editor.querySelector('[data-mention-id="b"]').firstChild;
+            const sel = window.getSelection(), range = document.createRange();
+            range.setStart(node, arguments[0] === 'backward' ? 0 : node.length);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            const event = new InputEvent('beforeinput', {
+                inputType: arguments[0] === 'backward'
+                    ? 'deleteContentBackward' : 'deleteContentForward',
+                cancelable: true, bubbles: true,
+            });
+            editor.dispatchEvent(event);
+            if (arguments[0] === 'backward') {
+                editor.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Escape', bubbles: true, cancelable: true,
+                }));
+            }
+            return {
+                prevented: event.defaultPrevented,
+                alice: editor.querySelector('[data-mention-id="a"]')?.textContent,
+                bob: editor.querySelector('[data-mention-id="b"]')?.textContent,
+                count: window.__instance.getMentions().length,
+            };
+        `, [direction]);
+        assert(state.prevented && state.bob === '@Bob' &&
+            (direction === 'backward'
+                ? state.alice === '@Alice' && state.count === 2
+                : state.alice === undefined && state.count === 1),
+            'Formatted boundary regression: ' + JSON.stringify({ direction, state }));
+    }
+
+    // Verify the updated public-API controls in the actual HTML demo.
+    await request(base + '/url', 'POST', { url: siteUrl });
+    await waitFor(
+        () => execute("return document.documentElement.dataset.demoReady === 'true'"),
+        Boolean, 'Updated demo did not initialize'
+    );
+    const punctuation = await execute(`
+        showPunctuationExample('editor');
+        const editorText = document.getElementById('editor').textContent;
+        const editorIds = JSON.parse(document.getElementById('mentions-editor').textContent);
+        showPunctuationExample('textarea');
+        return {
+            editorText,
+            editorIds,
+            textareaText: document.getElementById('textarea').value,
+            textareaIds: JSON.parse(document.getElementById('mentions-textarea').textContent),
+            buttonCount: document.querySelectorAll('[onclick^="showPunctuationExample"]').length,
+        };
+    `);
+    assert(punctuation.buttonCount === 2 &&
+        punctuation.editorText === '@Alice Walker, following text' &&
+        punctuation.textareaText === '@Alice Walker, following text' &&
+        punctuation.editorIds.length === 1 && punctuation.editorIds[0].id === '3' &&
+        punctuation.textareaIds.length === 1 && punctuation.textareaIds[0].id === 3,
+        'Updated punctuation demo failed: ' + JSON.stringify(punctuation));
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
