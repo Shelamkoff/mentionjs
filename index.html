@@ -182,6 +182,7 @@
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('editor')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('editor')">Push @Анна</button>
+            <button class="btn btn-secondary" onclick="showPunctuationExample('editor')">Before comma</button>
             <button class="btn btn-ghost" onclick="clearField('editor')">Clear</button>
         </div>
         <p id="search-editor" class="telemetry" role="status" aria-live="polite">Search: idle</p>
@@ -205,6 +206,7 @@
         <div class="toolbar">
             <button class="btn btn-primary" onclick="readMentions('textarea')">Get mentions</button>
             <button class="btn btn-secondary" onclick="pushMention('textarea')">Push @Мария</button>
+            <button class="btn btn-secondary" onclick="showPunctuationExample('textarea')">Before comma</button>
             <button class="btn btn-ghost" onclick="clearField('textarea')">Clear</button>
         </div>
         <p id="search-textarea" class="telemetry" role="status" aria-live="polite">Search: idle</p>
@@ -216,7 +218,8 @@
         <h2 id="how-to">Try these interactions</h2>
         <ul class="example-tips">
             <li><kbd>@</kbd> shows the first page; type a full name with spaces, scroll the dropdown, or use <kbd>↓</kbd> to load more.</li>
-            <li><kbd>Enter</kbd> or <kbd>Tab</kbd> commits a selected person. <kbd>Esc</kbd> closes the dropdown.</li>
+            <li><kbd>Enter</kbd> or <kbd>Tab</kbd> commits a selected person. <kbd>Esc</kbd> closes the dropdown. IME confirmation keys are left to the input method.</li>
+            <li><strong>Before comma</strong> resets that field and inserts @Alice Walker immediately before a comma, without adding an unwanted space.</li>
             <li>Use the buttons above to inspect, insert, and clear mentions using the public API.</li>
             <li>Searches run against local demo data only; no backend requests or account access.</li>
         </ul>
@@ -326,6 +329,33 @@ function clearField(kind) {
     instances[kind].clear();
     refreshMentions(kind);
     showStatus(kind, "Cleared");
+    document.getElementById("search-" + kind).textContent = "Search: idle";
+}
+
+// A public-API demo of the same separator behavior in both editing modes.
+function showPunctuationExample(kind) {
+    const host = document.getElementById(kind);
+    const instance = instances[kind];
+    ++requests[kind];
+    instance.clear();
+    if (kind === "textarea") {
+        host.value = ", following text";
+        host.focus();
+        host.setSelectionRange(0, 0);
+    } else {
+        host.textContent = ", following text";
+        host.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.setStart(host.firstChild, 0);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    instance.push({ id: 3, name: "Alice Walker" });
+    refreshMentions(kind);
+    showStatus(kind, "Mention inserted directly before comma");
     document.getElementById("search-" + kind).textContent = "Search: idle";
 }
 

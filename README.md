@@ -12,7 +12,7 @@ No dependencies. ~10 KB gzipped. TypeScript definitions included.
 - Works with both `<textarea>` and `contenteditable` elements
 - Async search function with debounce and stale-request guard
 - Scroll-based and keyboard-based pagination via `nextPageUrl`
-- Keyboard navigation: Arrow keys, Enter, Tab, Escape
+- Keyboard navigation: Arrow keys, Enter, Tab, Escape (IME composition keys are not intercepted)
 - Programmatic API: `push()`, `getMentions()`, `clear()`, `destroy()`
 - Avatar support (image URL or auto-generated letter placeholder)
 - Viewport-aware dropdown positioning (flips above cursor when near bottom)
@@ -271,7 +271,7 @@ Import `mention.css` for default styles. All classes are customizable:
 
 **Textarea**: Mentions are tracked as `{ id, name, start, end }` objects with UTF-16, half-open `[start, end)` ranges. Native edits are tracked via `beforeinput` and reconciled after `input`. Assigning `textarea.value` programmatically does not emit `input`; `getMentions()` and `push()` conservatively reconcile changes and may drop an ID when identical visible text makes mention identity ambiguous. The mention text is displayed inline as `@Name`.
 
-**ContentEditable**: Each mention is a `<span class="mention">` with internal ownership metadata plus `data-mention-id` and `data-mention-name`. Active (in-progress) mentions have the `.active` class. Browser-driven input is reconciled after `input`, while operations that need atomic mention behavior are handled through `beforeinput`.
+**ContentEditable**: Each mention is a `<span class="mention">` with internal ownership metadata plus `data-mention-id` and `data-mention-name`. Active (in-progress) mentions have the `.active` class. Browser-driven input is reconciled after `input`, while operations that need atomic mention behavior are handled through `beforeinput`. Boundary Backspace/Delete preserves mention identity when a mention is nested inside formatting elements; ordinary adjacent text remains editable. In both modes, committing or pushing a mention immediately before punctuation (`,;!?`) does not add an extra space. Composition-mode keyboard events are reserved for the IME rather than autocomplete selection.
 
 ## Files
 
@@ -307,6 +307,6 @@ Directly rewriting `contenteditable` HTML through browser editing commands or ex
 
 ## Demo deployment
 
-`index.html` is the interactive demo and uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets.
+`index.html` is the interactive demo and uses the local `mention.js` and `mention.css` files. It demonstrates abortable search, pagination, keyboard selection, the public `push()` / `clear()` / `getMentions()` methods, and committed IDs / offsets. The **Before comma** controls reset their corresponding field and demonstrate punctuation-safe insertion through the public API.
 
 The **Deploy demo to Pages** workflow publishes the demo and minified JS/CSS **after a successful CI run triggered by a push to `main`**. The [GitHub Pages site](https://shelamkoff.github.io/mentionjs/) has been deployed successfully. Pages uses **Settings → Pages → Build and deployment → Source: GitHub Actions**; no `gh-pages` branch is required.
