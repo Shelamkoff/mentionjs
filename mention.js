@@ -2206,7 +2206,21 @@
             return null;
         }
 
+        _edgeMention(node, fromEnd) {
+            if (this._isMentionSpan(node)) return node;
+            if (node?.nodeType !== Node.ELEMENT_NODE) return null;
+
+            // A formatted wrapper may hide an atomic mention at its edge.
+            // Never treat a mention's text as an ordinary editable character.
+            const textNode = this._findEdgeTextNode(node, fromEnd);
+            const mention = textNode?.parentElement?.closest('span.mention');
+            return mention && node.contains(mention) && this._isMentionSpan(mention)
+                ? mention
+                : null;
+        }
+
         _deleteEdgeCharacter(node, fromEnd) {
+            if (this._edgeMention(node, fromEnd)) return false;
             const textNode = this._findEdgeTextNode(node, fromEnd);
             if (textNode && textNode.textContent.length > 0) {
                 const text = textNode.textContent;
@@ -2352,18 +2366,23 @@
                 return removal.text !== text;
             }
 
-            if (this._isMentionSpan(prev)) {
-                prev.classList.add('active');
-                setCaretAt(prev.firstChild, prev.textContent.length);
-                this._mentionSpan = prev;
-                const query = prev.textContent.substring(this._opts.trigger.length);
+            const priorMention = this._edgeMention(prev, true);
+            if (priorMention) {
+                // Match the normal adjacent-mention behavior even if formatting
+                // elements are between the active caret and the previous token.
+                priorMention.classList.add('active');
+                const lastText = this._findEdgeTextNode(priorMention, true);
+                if (lastText) setCaretAt(lastText, lastText.textContent.length);
+                else setCaretAt(priorMention, priorMention.childNodes.length);
+                this._mentionSpan = priorMention;
+                const query = priorMention.textContent.substring(this._opts.trigger.length);
                 this._search(query).then((items) => {
                     if (items === null) return;
                     if (items === SEARCH_FAILED) {
                         this._closeDropdown();
                         return;
                     }
-                    this._openDropdownForSpan(items, prev);
+                    this._openDropdownForSpan(items, priorMention);
                 });
                 return false;
             }
@@ -2400,8 +2419,11 @@
             const next = node.nextSibling;
             if (!next) return false;
 
-            if (this._isMentionSpan(next)) {
-                next.remove();
+            const nextMention = this._edgeMention(next, false);
+            if (nextMention) {
+                // Forward delete already treats a directly adjacent mention as
+                // atomic. Preserve that rule through formatting wrappers too.
+                nextMention.remove();
                 return true;
             }
 
