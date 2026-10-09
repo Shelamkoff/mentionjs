@@ -85,6 +85,36 @@ for (const mode of ['textarea', 'contenteditable']) {
             }
         });
 
+        it('resets abandoned composition after blur so later keyboard selection works', async () => {
+            const { host, instance } = await setup(mode);
+            host.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            expect(instance._isComposing).toBe(true);
+
+            // Some browsers or focus transitions omit compositionend.
+            host.dispatchEvent(new Event('blur'));
+            expect(instance._isComposing).toBe(false);
+
+            host.focus();
+            if (mode === 'textarea') {
+                host.dispatchEvent(new Event('input', { bubbles: true }));
+            } else {
+                host.textContent = '';
+                selectionAt(host, 0);
+                host.dispatchEvent(new InputEvent('beforeinput', {
+                    inputType: 'insertText', data: '@',
+                    cancelable: true, bubbles: true,
+                }));
+            }
+            await vi.waitFor(() => {
+                expect(document.querySelector('.mention-dropdown.active')).not.toBeNull();
+            });
+
+            const enter = keydown(host, 'Enter');
+            expect(enter.defaultPrevented).toBe(true);
+            expect(instance.getMentions()).toHaveLength(1);
+            expect(instance.getMentions()[0].name).toBe('Alice');
+        });
+
         it('tracks compositionstart through compositionend even if keydown lacks isComposing', async () => {
             const { host, instance } = await setup(mode);
             host.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));

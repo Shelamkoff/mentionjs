@@ -1011,6 +1011,9 @@
             // A blur must not restore a selection inside the old host:
             // setBaseAndExtent() can focus that editor again in browsers.
             this._h.blur = () => {
+                // A host can lose focus without receiving compositionend.
+                // Never carry an abandoned IME session into the next focus.
+                this._isComposing = false;
                 this._clearNativeBoundaryMarker();
                 this._closeDropdown(false);
             };
