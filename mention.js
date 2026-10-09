@@ -1975,15 +1975,14 @@
             span.removeAttribute('id');
 
             const next = span.nextSibling;
-            const separatorKind = followingSeparator(
-                next?.nodeType === Node.TEXT_NODE ? next.textContent : ''
-            );
+            const nextText = this._findEdgeTextNode(next, false);
+            const separatorKind = followingSeparator(nextText?.textContent ?? '');
 
             if (separatorKind === 'space') {
-                setCaretAt(next, 1);
+                setCaretAt(nextText, 1);
             } else if (separatorKind === 'punctuation') {
-                // Keep the caret outside the committed span, before punctuation.
-                setCaretAt(next, 0);
+                // Place the caret before punctuation, even inside inline formatting.
+                setCaretAt(nextText, 0);
             } else {
                 const space = document.createTextNode('\u00A0');
                 span.after(space);
@@ -2201,7 +2200,10 @@
 
         _findEdgeTextNode(node, fromEnd) {
             if (!node) return null;
-            if (node.nodeType === Node.TEXT_NODE) return node;
+            // Empty text nodes are not an editable character or separator.
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent.length ? node : null;
+            }
             if (node.nodeType !== Node.ELEMENT_NODE) return null;
 
             const children = node.childNodes;
@@ -2849,12 +2851,11 @@
                 }
 
                 const next = span.nextSibling;
-                const separatorKind = followingSeparator(
-                    next?.nodeType === Node.TEXT_NODE ? next.textContent : ''
-                );
+                const nextText = this._findEdgeTextNode(next, false);
+                const separatorKind = followingSeparator(nextText?.textContent ?? '');
                 const separator = separatorKind === 'missing'
                     ? document.createTextNode('\u00A0')
-                    : next;
+                    : nextText;
                 if (separatorKind === 'missing') span.after(separator);
 
                 this._el.focus();
