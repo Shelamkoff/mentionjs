@@ -2238,38 +2238,55 @@
             return null;
         }
 
-        _edgeMention(node, fromEnd) {
+        // Boundary operations must stop at the nearest visible editing unit.
+        // Text-only traversal skips <br> and can target a mention past a break.
+        _findEdgeEditableNode(node, fromEnd) {
+            if (!node) return null;
             if (this._isMentionSpan(node)) return node;
-            if (node?.nodeType !== Node.ELEMENT_NODE) return null;
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent.length ? node : null;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return null;
+            if (node.tagName === 'BR') return node;
 
-            // A formatted wrapper may hide an atomic mention at its edge.
-            // Never treat a mention's text as an ordinary editable character.
-            const textNode = this._findEdgeTextNode(node, fromEnd);
-            const mention = textNode?.parentElement?.closest('span.mention');
-            return mention && node.contains(mention) && this._isMentionSpan(mention)
-                ? mention
-                : null;
+            const children = node.childNodes;
+            if (fromEnd) {
+                for (let i = children.length - 1; i >= 0; i--) {
+                    const found = this._findEdgeEditableNode(children[i], true);
+                    if (found) return found;
+                }
+            } else {
+                for (let i = 0; i < children.length; i++) {
+                    const found = this._findEdgeEditableNode(children[i], false);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        _edgeMention(node, fromEnd) {
+            const edge = this._findEdgeEditableNode(node, fromEnd);
+            return this._isMentionSpan(edge) ? edge : null;
         }
 
         _deleteEdgeCharacter(node, fromEnd) {
-            if (this._edgeMention(node, fromEnd)) return false;
-            const textNode = this._findEdgeTextNode(node, fromEnd);
-            if (textNode && textNode.textContent.length > 0) {
-                const text = textNode.textContent;
+            const edge = this._findEdgeEditableNode(node, fromEnd);
+            if (!edge || this._isMentionSpan(edge)) return false;
+
+            if (edge.nodeType === Node.ELEMENT_NODE && edge.tagName === 'BR') {
+                edge.remove();
+                return true;
+            }
+            if (edge.nodeType === Node.TEXT_NODE) {
+                const text = edge.textContent;
                 const removal = fromEnd
                     ? removeGraphemeBefore(text, text.length)
                     : removeGraphemeAt(text, 0);
 
-                textNode.textContent = removal.text;
-                if (textNode.textContent.length === 0) textNode.remove();
+                edge.textContent = removal.text;
+                if (edge.textContent.length === 0) edge.remove();
                 return removal.text !== text;
             }
-
-            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
-                node.remove();
-                return true;
-            }
-
             return false;
         }
 
@@ -2310,7 +2327,9 @@
                 const prev = container.childNodes[offset - 1];
                 if (this._isBlockBoundaryElement(prev)) return '\n';
 
-                const textNode = this._findEdgeTextNode(prev, true);
+                const edge = this._findEdgeEditableNode(prev, true);
+                if (edge?.tagName === 'BR') return '\n';
+                const textNode = this._findEdgeTextNode(edge, true);
                 if (textNode?.textContent?.length) return textNode.textContent.slice(-1);
             }
 
@@ -2320,7 +2339,9 @@
                 if (prev) {
                     if (this._isBlockBoundaryElement(prev)) return '\n';
 
-                    const textNode = this._findEdgeTextNode(prev, true);
+                    const edge = this._findEdgeEditableNode(prev, true);
+                    if (edge?.tagName === 'BR') return '\n';
+                    const textNode = this._findEdgeTextNode(edge, true);
                     if (textNode?.textContent?.length) return textNode.textContent.slice(-1);
                 }
 

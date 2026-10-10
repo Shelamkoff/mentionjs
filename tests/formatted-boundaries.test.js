@@ -111,3 +111,68 @@ describe('atomic mentions inside formatting wrappers', () => {
         ]);
     });
 });
+
+describe('formatted line-break boundaries', () => {
+    it('Backspace removes the trailing nested br rather than editing a preceding committed mention', () => {
+        const { editor, instance } = createEditor(
+            `<strong>${mention('first', 'Alice')}<br></strong>${mention('second', 'Bob')}`
+        );
+        const bob = editor.querySelector('[data-mention-id="second"]');
+        setCaret(bob.firstChild, 0);
+        const event = edit(editor, 'deleteContentBackward');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(editor.querySelector('strong br')).toBeNull();
+        expect(editor.querySelector('[data-mention-id="first"]').textContent).toBe('@Alice');
+        expect(instance.getMentions()).toEqual([
+            { id: 'first', name: 'Alice' },
+            { id: 'second', name: 'Bob' },
+        ]);
+    });
+
+    it('Delete removes a leading nested br rather than the following committed mention', () => {
+        const { editor, instance } = createEditor(
+            `${mention('first', 'Bob')}<em><br>${mention('second', 'Alice')}</em>`
+        );
+        const bob = editor.querySelector('[data-mention-id="first"]');
+        setCaret(bob.firstChild, bob.textContent.length);
+        const event = edit(editor, 'deleteContentForward');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(editor.querySelector('em br')).toBeNull();
+        expect(editor.querySelector('[data-mention-id="second"]').textContent).toBe('@Alice');
+        expect(instance.getMentions()).toEqual([
+            { id: 'first', name: 'Bob' },
+            { id: 'second', name: 'Alice' },
+        ]);
+    });
+
+    it('allows a mention trigger directly after a line break nested in inline formatting', () => {
+        const { editor } = createEditor('<strong>word<br></strong>');
+        setCaret(editor, 1);
+        const event = new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertText',
+            data: '@',
+        });
+        editor.dispatchEvent(event);
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(editor.querySelector('span.mention.active')?.textContent).toBe('@');
+        expect(editor.querySelector('strong br')).not.toBeNull();
+    });
+
+    it('still treats a nested mention as atomic when no br separates it from the caret', () => {
+        const { editor, instance } = createEditor(
+            `<strong>${mention('first', 'Alice')}</strong>${mention('second', 'Bob')}`
+        );
+        const bob = editor.querySelector('[data-mention-id="second"]');
+        setCaret(bob.firstChild, 0);
+        const event = edit(editor, 'deleteContentBackward');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(editor.querySelector('[data-mention-id="first"]').textContent).toBe('@Alice');
+        expect(instance.getMentions().some(item => item.id === 'second')).toBe(true);
+    });
+});
