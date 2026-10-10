@@ -1604,6 +1604,74 @@ try {
             kind + ': ' + JSON.stringify(selection));
     }
 
+
+    // Native keys at nested formatting boundaries must treat BR as the nearest
+    // editable unit, not corrupt an adjacent saved mention.
+    for (const direction of ['backward', 'forward']) {
+        await request(base + '/url', 'POST', { url: fixtureUrl });
+        await execute(`
+            const editor = document.getElementById('editor');
+            const alice = '<span class="mention" data-mention-id="alice" data-mention-name="Alice">@Alice</span>';
+            const bob = '<span class="mention" data-mention-id="bob" data-mention-name="Bob">@Bob</span>';
+            editor.innerHTML = arguments[0] === 'backward'
+                ? '<strong>' + alice + '<br></strong>' + bob
+                : bob + '<em><br>' + alice + '</em>';
+            editor.focus();
+            window.__instance = new MentionJS(editor);
+            const node = editor.querySelector('[data-mention-id="bob"]').firstChild;
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.setStart(node, arguments[0] === 'backward' ? 0 : node.length);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        `, [direction]);
+        await sendKeys(direction === 'backward' ? '\uE003' : '\uE017');
+        const result = await execute(`
+            const editor = document.getElementById('editor');
+            return {
+                html: editor.innerHTML,
+                br: !!editor.querySelector('br'),
+                alice: editor.querySelector('[data-mention-id="alice"]')?.textContent,
+                bob: editor.querySelector('[data-mention-id="bob"]')?.textContent,
+                mentions: window.__instance.getMentions(),
+            };
+        `);
+        assert(!result.br && result.alice === '@Alice' && result.bob === '@Bob' &&
+            result.mentions.length === 2,
+            'Native ' + direction + ' across nested BR damaged a mention: ' +
+            JSON.stringify(result));
+    }
+
+    // An inline-formatted line break is a valid boundary for a new mention.
+    await request(base + '/url', 'POST', { url: fixtureUrl });
+    await execute(`
+        const editor = document.getElementById('editor');
+        editor.innerHTML = '<strong>word<br></strong>';
+        editor.focus();
+        window.__instance = new MentionJS(editor, {
+            debounceDelay: 0,
+            searchFunction: async () => [{ id: 7, name: 'Alice' }],
+        });
+        const selection = window.getSelection(), range = document.createRange();
+        range.setStart(editor, 1);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    `);
+    await sendKeys('@');
+    await waitFor(
+        () => execute(`
+            const editor = document.getElementById('editor');
+            return {
+                span: editor.querySelector('.mention.active')?.textContent ?? null,
+                br: !!editor.querySelector('strong br'),
+            };
+        `),
+        (result) => result.span === '@' && result.br,
+        'Native trigger after nested BR was not recognized'
+    );
+
     await execute('window.__browserSmokePassed = true; return true;');
     console.log(`MentionJS ${BROWSER} ${BUNDLE} smoke tests passed`);
 } catch (error) {
